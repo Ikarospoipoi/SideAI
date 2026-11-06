@@ -19,3 +19,5 @@ docs/performance-samples.json
 Resources/AppIcon.icns
 docs/screenshots/
 docs/*.docx
+
+/windows/build-runtime/

@@ -52,13 +52,13 @@ Windows 10 / 11 的 AI 侧栏客户端。Windows 11 x64 是本次主要目标。
 
 同一 AI 的**聊天连接**只保留一种接入方式，避免官网授权和 API 重复混用。聊天 GPT 与 Agent Codex 属于不同模式，可以同时存在。登录资格、订阅额度与 API 计费仍由各家服务决定。
 
-官方客户端安装在 SideAI 的私有 Runtimes 中。Codex、Claude Code、Kimi、Grok 使用官方 npm 包；Gemini 下载 Google Antigravity 官方 exe 并校验清单 SHA-512。也可指定已安装官方客户端路径。Claude Code 的 Windows 前置要求（例如 Git for Windows）仍需满足；安装或登录失败会显示错误，不模拟成功。
+安装包内置 Node.js 24 和 npm，用户不需要另外安装 Node.js。官方客户端安装在 SideAI 的私有 Runtimes 中。Codex、Claude Code、Kimi、Grok 使用官方 npm 包；Gemini 下载 Google Antigravity 官方 exe 并校验清单 SHA-512。也可指定已安装官方客户端路径。Claude Code 的 Windows 前置要求（例如 Git for Windows）仍需满足；安装或登录失败会显示错误，不模拟成功。
 
 登录和 API 请求使用真实后端。开发阶段的本地 HTTP / CLI fixture 只在测试目录，不用于正常回复。Windows 官方账号授权与付费请求未在真实 Windows 账号上端到端验证。
 
 ## 开发
 
-要求 Node.js 24+。从仓库根目录：
+开发与打包要求 Node.js 24 LTS（正式安装包内置运行时）。从仓库根目录：
 
 ```powershell
 cd windows
@@ -69,7 +69,7 @@ npm start
 npm run pack
 ```
 
-输出位于 `windows/release/`。`npm run smoke` 使用临时数据目录验证启动、预加载桥和页面；`npm run game-lab` 打开全屏 / 鼠标锁定测试场，便于手动反复切换。测试场不是 FPS / MOBA 或反作弊验证。
+输出位于 `windows/release/`。`npm run smoke` 使用临时数据目录验证启动、输入焦点、审批界面、图片预览与内置客户端安装器；CI 也会对打包后的程序执行同一检查；`npm run game-lab` 打开全屏 / 鼠标锁定测试场，便于手动反复切换。测试场不是 FPS / MOBA 或反作弊验证。
 
 原生 Mac 版仍使用仓库根目录的 `./scripts/build.sh` 和 `swift test`。两套客户端目前各自保存数据，不自动同步账号和历史。
 

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {Service} from './service';
+import {nodeExecutable,installerScript} from './runtime';
 /** Runs only under --smoke-test, with a temporary data directory and no cloud calls. */
 export async function smokeTest(window:BrowserWindow,service:Service){
   const evaluate=(code:string)=>window.webContents.executeJavaScript(code);
@@ -23,8 +24,15 @@ export async function smokeTest(window:BrowserWindow,service:Service){
   service.changed();await new Promise(r=>setTimeout(r,80));
   if(!await evaluate("document.querySelector('#draftImages img')?.src.startsWith('data:image/png;base64,')"))throw Error('Image preview cache was lost after a state update');
   if(folder)fs.writeFileSync(path.join(folder,'chat.png'),(await window.webContents.capturePage()).toPNG());
-  const npm=path.join(path.dirname(require.resolve('npm/package.json')),'bin','npm-cli.js').replace(/app\.asar([\\/])/,'app.asar.unpacked$1');let version='';
-  await service.runtime.runProcess(process.execPath,[npm,'--version'],service.storage.root,service.runtime.env('codex',true),AbortSignal.timeout(30000),s=>version+=s);
+  const npm=installerScript();let version='';
+  await service.runtime.runProcess(nodeExecutable(),[npm,'--version'],service.storage.root,service.runtime.env('codex',true),AbortSignal.timeout(30000),s=>version+=s).catch(e=>{throw Error(`${e.message}: ${version.slice(-4000)}`);});
   if(!/12\.2\.2/.test(version))throw Error('Bundled official-client installer failed: '+version.slice(0,100));
+  const fixture=service.storage.directory('installer-fixture'),destination=service.storage.directory('installer-check');
+  fs.writeFileSync(path.join(fixture,'package.json'),JSON.stringify({name:'sideai-smoke-client',version:'1.0.0',scripts:{postinstall:`node -e "require('fs').writeFileSync('installed.txt',process.version)"`}}));
+  fs.writeFileSync(path.join(destination,'package.json'),JSON.stringify({name:'sideai-smoke-host',private:true,allowScripts:{'sideai-smoke-client':true}}));
+  let installation='';
+  await service.runtime.runProcess(nodeExecutable(),[npm,'install','--offline','--ignore-scripts','--install-links','--no-audit','--no-fund','--prefix',destination,fixture],destination,service.runtime.env('codex',true),AbortSignal.timeout(30000),s=>installation+=s).catch(e=>{throw Error(`${e.message}: ${installation.slice(-4000)}`);});
+  await service.runtime.runProcess(nodeExecutable(),[npm,'run','postinstall','--prefix',path.join(destination,'node_modules','sideai-smoke-client')],destination,service.runtime.env('codex',true),AbortSignal.timeout(30000),s=>installation+=s).catch(e=>{throw Error(`${e.message}: ${installation.slice(-4000)}`);});
+  if(!fs.readFileSync(path.join(destination,'node_modules','sideai-smoke-client','installed.txt'),'utf8').startsWith('v24.'))throw Error('Bundled Node failed to run client install scripts');
   console.log(JSON.stringify({smoke:'passed',platform:process.platform,packaged:app.isPackaged,installer:version.trim(),...result}));
 }

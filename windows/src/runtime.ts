@@ -14,12 +14,21 @@ export const runtimeInfo:Record<string,{exe:string;env:string;pkg?:string;bin?:s
   grok:{exe:'grok',env:'GROK_HOME',pkg:'@xai-official/grok@1.0.77',auth:'grok.com',hosts:['auth.x.ai','accounts.x.ai','grok.com']},
   gemini:{exe:'agy',env:'ANTIGRAVITY_GEMINI_DIR',auth:'oauth-personal',hosts:['accounts.google.com','antigravity.google','antigravity.google.com']}
 };
+/** Bundled Node and npm keep official clients independent of a system Node installation. */
+export function nodeExecutable(){
+  const bundled=process.resourcesPath&&path.join(process.resourcesPath,'runtime',process.platform==='win32'?'node.exe':'node');
+  return bundled&&fs.existsSync(bundled)?bundled:process.execPath;
+}
+export function installerScript(){
+  const bundled=process.resourcesPath&&path.join(process.resourcesPath,'installer','npm','bin','npm-cli.js');
+  return bundled&&fs.existsSync(bundled)?bundled:path.join(path.dirname(require.resolve('npm/package.json')),'bin','npm-cli.js');
+}
 export class Runtimes {
   constructor(private storage:Storage,private notice:(s:string)=>void,private open:(s:string)=>Promise<void>,private fetcher:Fetch=fetch){}
   env(engine:Engine,node=false):NodeJS.ProcessEnv {
     const env={...process.env};for(const k of Object.keys(env))if(/^(OPENAI_|CODEX_|ANTHROPIC_|CLAUDE|KIMI_|GEMINI_|GOOGLE_|GROK_|XAI_|AGY_|ANTIGRAVITY_)/.test(k))delete env[k];
     const info=runtimeInfo[engine];if(info){env[info.env]=this.storage.directory('Accounts',engine);if(engine==='gemini'){env.ANTIGRAVITY_CREDENTIAL_SCOPE='sideai-'+createHash('sha256').update(env[info.env]!).digest('hex');env.AGY_CLI_DISABLE_AUTO_UPDATE='1';}}
-    env.NO_COLOR='1';env.NO_PROXY='localhost,127.0.0.1,::1';if(node)env.ELECTRON_RUN_AS_NODE='1';else delete env.ELECTRON_RUN_AS_NODE;return env;
+    env.NO_COLOR='1';env.NO_PROXY='localhost,127.0.0.1,::1';if(node){env.ELECTRON_RUN_AS_NODE='1';env.PATH=path.dirname(nodeExecutable())+path.delimiter+(env.PATH??env.Path??'');if(process.platform==='win32')delete env.Path;}else delete env.ELECTRON_RUN_AS_NODE;return env;
   }
   prepare(engine:Engine){
     const cwd=this.storage.directory('Scratch','Accounts',engine),home=this.storage.directory('Accounts',engine);
@@ -31,9 +40,9 @@ export class Runtimes {
   }
   find(engine:Engine,custom?:string):{exe:string;prefix:string[];node:boolean}|undefined {
     const info=runtimeInfo[engine];if(!info)return;
-    if(custom){if(!path.isAbsolute(custom)||!fs.existsSync(custom)||!/\.(exe|js|cjs|mjs)$/i.test(custom))throw Error('请选择官方客户端的 .exe 或 .js 文件。');return /\.exe$/i.test(custom)?{exe:custom,prefix:[],node:false}:{exe:process.execPath,prefix:[custom],node:true};}
+    if(custom){if(!path.isAbsolute(custom)||!fs.existsSync(custom)||!/\.(exe|js|cjs|mjs)$/i.test(custom))throw Error('请选择官方客户端的 .exe 或 .js 文件。');return /\.exe$/i.test(custom)?{exe:custom,prefix:[],node:false}:{exe:nodeExecutable(),prefix:[custom],node:true};}
     const nodeModules=path.join(this.storage.root,'Runtimes','node_modules'),packageName=info.pkg?.replace(/@[^/@]+$/,'');
-    if(packageName){const dir=path.join(nodeModules,packageName),manifest=path.join(dir,'package.json');if(fs.existsSync(manifest)){const json=JSON.parse(fs.readFileSync(manifest,'utf8'));const bin=typeof json.bin==='string'?json.bin:json.bin?.[info.exe]??Object.values(json.bin??{})[0];if(typeof bin==='string'){const script=path.resolve(dir,bin);if(fs.existsSync(script))return {exe:process.execPath,prefix:[script],node:true};}}}
+    if(packageName){const dir=path.join(nodeModules,packageName),manifest=path.join(dir,'package.json');if(fs.existsSync(manifest)){const json=JSON.parse(fs.readFileSync(manifest,'utf8'));const bin=typeof json.bin==='string'?json.bin:json.bin?.[info.exe]??Object.values(json.bin??{})[0];if(typeof bin==='string'){const script=path.resolve(dir,bin);if(fs.existsSync(script))return {exe:nodeExecutable(),prefix:[script],node:true};}}}
     const candidates=[path.join(this.storage.root,'Runtimes','bin',info.exe+'.exe'),path.join(os.homedir(),'.local','bin',info.exe+'.exe'),...(process.env.PATH??'').split(path.delimiter).filter(Boolean).map(p=>path.join(p,info.exe+(process.platform==='win32'?'.exe':'')))];
     const exe=candidates.find(p=>fs.existsSync(p));if(exe)return {exe,prefix:[],node:false};
   }
@@ -51,8 +60,12 @@ export class Runtimes {
     }
     const info=runtimeInfo[engine];if(!info?.pkg)throw Error('请在高级选项选择已安装的官方 Antigravity CLI（agy.exe）。');
     this.notice('正在安装官方客户端，首次使用可能需要几分钟…');
-    const npm=path.join(path.dirname(require.resolve('npm/package.json')),'bin','npm-cli.js').replace(/app\.asar([\\/])/,'app.asar.unpacked$1');
-    await this.runProcess(process.execPath,[npm,'install','--prefix',this.storage.directory('Runtimes'),'--no-audit','--no-fund',info.pkg],this.storage.root,{...this.env(engine,true)},signal,()=>{});
+    const npm=installerScript(),directory=this.storage.directory('Runtimes'),manifestFile=path.join(directory,'package.json');
+    const manifest=fs.existsSync(manifestFile)?JSON.parse(fs.readFileSync(manifestFile,'utf8')):{name:'sideai-official-clients',private:true};
+    // npm 12 requires explicit install-script approval. Only our official catalog is allowed.
+    manifest.allowScripts=Object.fromEntries(Object.values(runtimeInfo).filter(i=>i.pkg).map(i=>[i.pkg!.replace(/@[^/@]+$/,''),true]));
+    fs.writeFileSync(manifestFile,JSON.stringify(manifest,null,2));
+    await this.runProcess(nodeExecutable(),[npm,'install','--prefix',this.storage.directory('Runtimes'),'--no-audit','--no-fund',info.pkg],this.storage.root,{...this.env(engine,true)},signal,()=>{});
     if(!this.find(engine))throw Error('官方客户端安装失败，请检查网络后重试。');
   }
   start(c:Connection,args:string[],cwd?:string) {

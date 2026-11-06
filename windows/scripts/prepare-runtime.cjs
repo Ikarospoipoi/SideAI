@@ -1,0 +1,11 @@
+const fs=require('node:fs');
+const path=require('node:path');
+if(!process.versions.node.startsWith('24.'))throw Error('Build with Node.js 24 LTS.');
+const out=path.join(__dirname,'..','build-runtime');
+fs.mkdirSync(out,{recursive:true});
+const target=path.join(out,process.platform==='win32'?'node.exe':'node');
+fs.copyFileSync(process.execPath,target);
+if(process.platform!=='win32')fs.chmodSync(target,0o755);
+const license=[path.join(path.dirname(process.execPath),'LICENSE'),path.join(path.dirname(process.execPath),'LICENSE.txt'),path.join(path.dirname(process.execPath),'..','LICENSE')].find(p=>fs.existsSync(p));
+if(!license)throw Error('Node.js distribution LICENSE is required.');
+fs.copyFileSync(license,path.join(out,'LICENSE.txt')); 

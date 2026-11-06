@@ -9,20 +9,20 @@
     "build": "tsc && node scripts/copy-ui.cjs",
     "start": "npm run build && electron .",
     "test": "npm run build && node --test test/*.test.cjs",
-    "pack": "npm run build && electron-builder --win nsis zip --x64 --publish never",
+    "pack": "npm run build && node scripts/prepare-runtime.cjs && electron-builder --win nsis zip --x64 --publish never",
     "smoke": "electron . --smoke-test",
     "game-lab": "electron . --game-lab"
   },
   "dependencies": {
     "jose": "6.2.15",
-    "koffi": "3.3.7",
-    "npm": "12.2.2"
+    "koffi": "3.3.7"
   },
   "devDependencies": {
     "@types/node": "24.10.0",
     "electron": "45.2.3",
     "electron-builder": "26.18.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "npm": "12.2.2"
   },
   "build": {
     "appId": "io.github.ikarospoipoi.sideai",
@@ -36,8 +36,7 @@
     ],
     "asarUnpack": [
       "node_modules/koffi/**/*",
-      "node_modules/@koromix/**/*",
-      "node_modules/npm/**/*"
+      "node_modules/@koromix/**/*"
     ],
     "npmRebuild": false,
     "win": {
@@ -55,6 +54,13 @@
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true
-    }
+    },
+    "extraResources": [
+      {
+        "from": "build-runtime",
+        "to": "runtime"
+      }
+    ],
+    "afterPack": "scripts/after-pack.cjs"
   }
 }
