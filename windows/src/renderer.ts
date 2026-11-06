@@ -15,7 +15,8 @@ function connection(){return state?.connections.find((c:any)=>c.id===current()?.
 function dialog(title:string){$('dialogTitle').textContent=title;$('dialogBody').replaceChildren();if(!modalDialog.open)modalDialog.showModal();return $('dialogBody');}
 function closeDialog(){modalDialog.close();composer.focus();}
 function patch(values:any){if(current())fire('patch',{id:current().id,patch:values});}
-function render(s:any){state=s;const c=current(),conn=connection(),changed=lastSelected!==s.selected;lastSelected=s.selected??'';
+const imageCache=new Map<string,string>();
+function render(s:any){for(const c of s.conversations){for(const a of [...c.images,...c.items.flatMap((i:any)=>i.images??[])]){if(a.dataURL)imageCache.set(a.id,a.dataURL);else a.dataURL=imageCache.get(a.id)??'';}}state=s;const c=current(),conn=connection(),changed=lastSelected!==s.selected;lastSelected=s.selected??'';
   $('notice').textContent=s.hotkeyError||s.notice||'';
   const loginStatus=$('loginStatus');if(loginStatus){loginStatus.textContent=s.notice;const cancel=$('cancelLogin');if(cancel)(cancel as HTMLButtonElement).disabled=!s.loginBusy;}
   $('brand').textContent=conn?.name??'SideAI';$('brand').style.color=conn?catalog?.[conn.provider]?.color??'#ddd':'#ddd';$('subtitle').textContent=c?`${c.title} · ${statusName(c.status)}`:'随时，接着想';

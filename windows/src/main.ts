@@ -14,6 +14,8 @@ else app.setPath('userData',path.join(app.getPath('appData'),'SideAI-Windows'));
 if(!smoke&&!app.requestSingleInstanceLock()){app.quit();}
 let window:BrowserWindow,tray:Tray,handle:BrowserWindow,service:Service,native:Win32|undefined,lease:FocusLease|undefined;
 let closing=false,modal=false,quitting=false,cursorTimer:NodeJS.Timeout|undefined,returnTimer:NodeJS.Timeout|undefined;
+const deliveredImages=new Set<string>();let lastTrayState='';
+function presentationState(){const state=service.view();const image=(a:Attachment,visible:boolean)=>{if(!visible||deliveredImages.has(a.id))return {...a,dataURL:''};deliveredImages.add(a.id);return a;};return {...state,conversations:state.conversations.map(c=>({...c,images:c.images.map(a=>image(a,c.id===state.selected)),items:c.items.map(i=>({...i,images:i.images?.map(a=>image(a,c.id===state.selected))}))}))};}
 let hotkey='',shownAt=0,stats={opens:0,lastFocusMs:0,lastNativeFocus:false,cursorReleased:false,restored:false};
 function icon(color='#82c7b3') {const pixels=Buffer.alloc(24*24*4);const rgb=color.match(/\w\w/g)!.map(x=>parseInt(x,16));for(let y=4;y<20;y++)for(let x=4;x<20;x++)if(x<8||y<7||y>16){const i=(y*24+x)*4;pixels[i]=rgb[2];pixels[i+1]=rgb[1];pixels[i+2]=rgb[0];pixels[i+3]=255;}return nativeImage.createFromBitmap(pixels,{width:24,height:24});}
 function sendFocus(){window.webContents.send('focus-composer');}
@@ -25,7 +27,7 @@ function show(){
   const displays=screen.getAllDisplays().map(d=>d.workArea);window.setBounds(clampBounds(window.getBounds(),displays));
   handle.hide();window.setAlwaysOnTop(true,'screen-saver');window.show();
   if(native&&lease){stats.lastNativeFocus=native.activate(lease.own);stats.cursorReleased=stats.lastNativeFocus&&service.state.settings.gameMode?native.releaseCursor():false;}
-  window.focus();window.webContents.focus();sendFocus();
+  window.focus();window.webContents.focus();sendFocus();window.webContents.send('state',presentationState());
   if(native&&lease&&service.state.settings.gameMode&&native.current()?.handle===lease.own.handle){native.releaseCursor();const b=window.getBounds(),point=screen.dipToScreenPoint({x:Math.round(b.x+b.width/2),y:Math.round(b.y+b.height-160)});native.moveCursor(point.x,point.y);}
   if(cursorTimer)clearInterval(cursorTimer);
   if(native&&service.state.settings.gameMode)cursorTimer=setInterval(()=>{if(window.isVisible()&&window.isFocused())stats.cursorReleased=lease!.maintain();},120);
@@ -61,7 +63,7 @@ async function attachment(bytes:Buffer,name:string):Promise<Attachment>{
 }
 async function action(method:string,p:any={}){
   switch(method){
-    case 'state':return service.view();
+    case 'state':return presentationState();
     case 'catalog':return providers;
     case 'hide':hide();return;
     case 'home':service.state.selected=undefined;service.changed();return;
@@ -104,7 +106,7 @@ async function start(){
   service=new Service(storage,new Vault(storage.directory('Credentials'),safeStorage),net.fetch as typeof fetch,async url=>{const u=new URL(url);if(u.protocol!=='https:')throw Error('登录地址无效');await shell.openExternal(u.href);});
   const primary=screen.getPrimaryDisplay().workArea,bounds=storage.state.settings.bounds??{x:primary.x+12,y:primary.y+40,width:460,height:Math.min(820,primary.height-80)};
   window=new BrowserWindow({...clampBounds(bounds,screen.getAllDisplays().map(d=>d.workArea)),minWidth:360,minHeight:420,show:false,frame:false,backgroundColor:'#202020',skipTaskbar:true,resizable:true,webPreferences:{preload:path.join(__dirname,'preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,spellcheck:false}});
-  window.setMenu(null);window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',e=>e.preventDefault());window.webContents.session.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
+  window.setMenu(null);window.webContents.on('did-start-loading',()=>deliveredImages.clear());window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',e=>e.preventDefault());window.webContents.session.setPermissionRequestHandler((_w,_p,callback)=>callback(false));
   handle=new BrowserWindow({width:10,height:64,frame:false,transparent:true,show:false,skipTaskbar:true,resizable:false,focusable:false,alwaysOnTop:true,webPreferences:{preload:path.join(__dirname,'preload.js'),sandbox:true,contextIsolation:true,nodeIntegration:false}});handle.setMenu(null);
   await handle.loadURL('data:text/html,'+encodeURIComponent(`<html><body style="margin:0;background:#82c7b3;border-radius:8px;cursor:pointer" title="SideAI"></body></html>`));
   // Native handle receives mouse events without taking keyboard focus from a game.
@@ -119,7 +121,7 @@ async function start(){
     if(event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame)throw Error('无效的窗口请求');
     try{return {ok:true,value:await action(method,p)};}catch(e){const message=safeError(e);service.message(message);return {ok:false,error:message};}
   });
-  service.on('change',state=>{if(!window.isDestroyed())window.webContents.send('state',state);const waiting=state.approvals.length;tray?.setToolTip(waiting?`SideAI · ${waiting} 项等待确认`:service.busy?'SideAI · 任务进行中':'SideAI');tray?.setImage(icon(waiting?'#e2b766':'#82c7b3'));});
+  service.on('change',state=>{if(!window.isDestroyed()&&window.isVisible())window.webContents.send('state',presentationState());const waiting=state.approvals.length;const title=waiting?`SideAI · ${waiting} 项等待确认`:service.busy?'SideAI · 任务进行中':'SideAI';if(lastTrayState!==title){lastTrayState=title;tray?.setToolTip(title);tray?.setImage(icon(waiting?'#e2b766':'#82c7b3'));void handle.webContents.executeJavaScript("document.body.style.background='"+(waiting?'#e2b766':'#82c7b3')+"'").catch(()=>{});}});
   service.on('attention',()=>{tray?.setImage(icon('#e2b766'));if(!storage.state.settings.gameMode&&storage.state.settings.autoPeek){window.flashFrame(true);}});
   window.on('focus',()=>{window.flashFrame(false);sendFocus();});
   window.on('blur',()=>{if(!modal&&!storage.state.settings.pin&&!closing)hide(false);});
@@ -131,7 +133,7 @@ async function start(){
     if(service.busy){modal=true;const result=await dialog.showMessageBox(window,{type:'question',message:'还有任务在运行。退出会断开本客户端的后端连接，确定退出？',buttons:['继续运行','退出'],defaultId:0,cancelId:0});modal=false;if(result.response!==1)return;}quitting=true;app.quit();}}]));
   await window.loadFile(path.join(__dirname,'index.html'));show();
   if(lab)await gameLab();
-  if(smoke){await new Promise(r=>setTimeout(r,800));const result=await window.webContents.executeJavaScript(`({title:document.title,composer:!!document.getElementById('composer'),bridge:typeof window.sideai?.call,body:document.body.innerText})`);if(!result.composer||result.bridge!=='function')throw Error('UI smoke test failed');if(process.platform==='win32'&&!native)throw Error('Win32 binding missing');console.log(JSON.stringify({smoke:'passed',platform:process.platform,native:!!native,...result}));quitting=true;app.quit();}
+  if(smoke){const {smokeTest}=await import('./smoke.js');await smokeTest(window,service);quitting=true;app.quit();}
 }
 async function gameLab(){
   const game=new BrowserWindow({width:1100,height:760,title:'SideAI 游戏切换测试场',backgroundColor:'#121820',webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,partition:'sideai-game-lab'}});

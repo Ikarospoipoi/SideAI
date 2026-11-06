@@ -31,6 +31,14 @@ jobs:
       - run: npm run pack
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Test packaged executable and bundled installer
+        run: |
+          $process = Start-Process -FilePath './release/win-unpacked/SideAI.exe' -ArgumentList '--smoke-test' -Wait -PassThru -RedirectStandardOutput 'packaged-smoke.log' -RedirectStandardError 'packaged-smoke-error.log'
+          Get-Content 'packaged-smoke.log'
+          Get-Content 'packaged-smoke-error.log'
+          if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+          if (-not (Select-String -Path 'packaged-smoke.log' -Pattern '"smoke":"passed"' -Quiet)) { throw 'Missing packaged smoke result' }
+        timeout-minutes: 3
       - uses: actions/upload-artifact@v4
         with:
           name: SideAI-Windows-x64

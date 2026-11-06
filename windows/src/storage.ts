@@ -16,7 +16,7 @@ export class Storage {
     } else this.state={version:1,connections:[],conversations:[],workspace:'chat',settings:{hotkey:'Control+Alt+Space',gameMode:true,pin:false,autoPeek:true,hostID:`urn:uuid:${randomUUID()}`}};
   }
   directory(...parts:string[]) { const p=path.join(this.root,...parts);fs.mkdirSync(p,{recursive:true,mode:0o700});return p; }
-  saveSoon() { if(!this.timer) this.timer=setTimeout(()=>{this.timer=undefined;this.save();},200); }
+  saveSoon() { if(!this.timer) this.timer=setTimeout(()=>{this.timer=undefined;this.save();},1500); }
   save() {
     if(this.timer) clearTimeout(this.timer);this.timer=undefined;
     const file=path.join(this.root,'state.json');

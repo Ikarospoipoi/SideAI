@@ -2,6 +2,8 @@
 
 日期：2026-11-06。当前开发主机为 macOS；用户暂时没有可供远程测试的 Windows 环境。
 
+已在 [Windows CI 第 2 次运行](https://github.com/Ikarospoipoi/SideAI/actions/runs/42180407562) 完成 32 项测试、原生 Win32 启动检查，并生成 NSIS 安装包和 ZIP。Runner 为 Windows Server 2025，不能代替 Windows 11 游戏实测。Mac 原生版本另通过 53 项测试，2 项按条件跳过。
+
 ## 自动化
 
 - TypeScript 严格编译。
