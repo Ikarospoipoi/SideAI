@@ -2,7 +2,7 @@
 
 日期：2026-11-06。当前开发主机为 macOS；用户暂时没有可供远程测试的 Windows 环境。
 
-已在 [Windows CI 第 2 次运行](https://github.com/Ikarospoipoi/SideAI/actions/runs/42180407562) 完成 32 项测试、原生 Win32 启动检查，并生成 NSIS 安装包和 ZIP。Runner 为 Windows Server 2025，不能代替 Windows 11 游戏实测。Mac 原生版本另通过 53 项测试，2 项按条件跳过。
+已在 [最终 Windows CI](https://github.com/Ikarospoipoi/SideAI/actions/runs/42183878864) 完成 32 项测试、原生 Win32 启动检查和打包后程序检查，并生成 NSIS 安装包和 ZIP（代码提交 `40af660`）。Runner 为 Windows Server 2025，不能代替 Windows 11 游戏实测。Mac 原生版本另通过 53 项测试，2 项按条件跳过。
 
 ## 自动化
 
@@ -13,8 +13,10 @@
 - 连接去重、地址不可重定向、凭据不进入 state.json、删除后保留历史、导入去重。
 - 焦点控制器：游戏 → SideAI → 游戏、重复唤出、激活失败不解锁第三方鼠标、Alt-Tab 不抢回、失效句柄不恢复。
 - Windows 专属：加载 user32.dll，读取前台窗口与进程身份，验证 Win32 签名。
-- Electron 启动检查：独立临时目录、受限 preload、主页与聊天输入框。
+- Electron 源码与打包后启动检查：独立临时目录、受限 preload、主页、聊天输入焦点、审批按钮、代码块和图片预览缓存。
+- 安装器检查：完整内置 npm、独立 Node.js 24，在临时目录离线安装测试包并执行 Node 脚本，无需用户预装 Node.js。
 - Windows CI：安装依赖、测试、启动检查、NSIS 安装包与 ZIP 构建。
+- [下载本次构建产物](https://github.com/Ikarospoipoi/SideAI/actions/runs/42183878864/artifacts/13486682487)：保留至 2026-12-06；过期后可重新运行工作流。
 
 真实云端登录、真实 Agent 文件审批与 Windows 游戏操作不以 mock 测试冒充通过。
 
