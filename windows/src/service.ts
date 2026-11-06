@@ -38,7 +38,7 @@ export class Service extends EventEmitter {
   async removeConnection(id:string){this.idle();const connection=this.connection(id);this.storage.backup();
     if(runtimeInfo[connection.engine]){
       const home=this.storage.directory('Accounts',connection.engine);
-      if(connection.engine==='gemini'&&this.runtime.find(connection.engine,connection.executable)){const {rpc}=await startACP(this.runtime,connection);try{await rpc.request('logout',{});}finally{rpc.stop();}}
+      if(connection.engine==='gemini'&&this.runtime.find(connection.engine,connection.executable)){const {rpc}=await startACP(this.runtime,connection);try{await rpc.request('logout',{});}finally{await rpc.dispose();}}
       if(connection.engine==='claude'&&this.runtime.find(connection.engine,connection.executable)){const cmd=this.runtime.find(connection.engine,connection.executable)!;await this.runtime.runProcess(cmd.exe,[...cmd.prefix,'auth','logout'],this.runtime.prepare(connection.engine),this.runtime.env(connection.engine,cmd.node),AbortSignal.timeout(30000),()=>{});}
       fs.rmSync(home,{recursive:true,force:true});
     }

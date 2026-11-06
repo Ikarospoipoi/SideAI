@@ -6,6 +6,7 @@ import {RPC} from './rpc';
 import {Engine,Connection,Model,Conversation} from './types';
 import {Storage} from './storage';
 import {Fetch,jsonRequest} from './http';
+import {ProcessTree} from './process-tree';
 export const runtimeInfo:Record<string,{exe:string;env:string;pkg?:string;bin?:string;auth?:string;hosts:string[]}>={
   codex:{exe:'codex',env:'CODEX_HOME',pkg:'@openai/codex',bin:'bin/codex.js',hosts:['auth.openai.com']},
   claude:{exe:'claude',env:'CLAUDE_CONFIG_DIR',pkg:'@anthropic-ai/claude-code',bin:'cli.js',hosts:['claude.ai','platform.claude.com','console.anthropic.com']},
@@ -50,7 +51,7 @@ export class Runtimes {
     }
     const info=runtimeInfo[engine];if(!info?.pkg)throw Error('请在高级选项选择已安装的官方 Antigravity CLI（agy.exe）。');
     this.notice('正在安装官方客户端，首次使用可能需要几分钟…');
-    const npm=path.join(path.dirname(require.resolve('npm/package.json')),'bin','npm-cli.js');
+    const npm=path.join(path.dirname(require.resolve('npm/package.json')),'bin','npm-cli.js').replace(/app\.asar([\\/])/,'app.asar.unpacked$1');
     await this.runProcess(process.execPath,[npm,'install','--prefix',this.storage.directory('Runtimes'),'--no-audit','--no-fund',info.pkg],this.storage.root,{...this.env(engine,true)},signal,()=>{});
     if(!this.find(engine))throw Error('官方客户端安装失败，请检查网络后重试。');
   }
@@ -60,10 +61,10 @@ export class Runtimes {
   }
   async runProcess(exe:string,args:string[],cwd:string,env:NodeJS.ProcessEnv,signal:AbortSignal,output:(s:string)=>void){
     const {spawn}=await import('node:child_process');await new Promise<void>((resolve,reject)=>{
-      const p=spawn(exe,args,{cwd,env,windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false});let settled=false;
+      const p=spawn(exe,args,{cwd,env,windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false});const tree=new ProcessTree(p);let settled=false;
       const finish=(e?:Error)=>{if(settled)return;settled=true;clearTimeout(timer);signal.removeEventListener('abort',cancel);e?reject(e):resolve();};
-      const cancel=()=>{p.kill();finish(Error('登录已取消或超时'));};const timer=setTimeout(cancel,300000);signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();
-      p.stdout.on('data',b=>output(b.toString()));p.stderr.on('data',b=>output(b.toString()));p.on('error',e=>finish(e));p.on('exit',code=>finish(code===0?undefined:Error(`官方客户端退出（${code}），请检查网络、客户端版本与账号。`)));
+      const cancel=()=>{tree.terminate();finish(Error('登录已取消或超时'));};const timer=setTimeout(cancel,300000);signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();
+      p.stdout.on('data',b=>output(b.toString()));p.stderr.on('data',b=>output(b.toString()));p.on('error',e=>finish(e));p.on('close',code=>finish(code===0?undefined:Error(`官方客户端退出（${code}），请检查网络、客户端版本与账号。`)));
     });
   }
   async loginCLI(c:Connection,signal:AbortSignal,consoleAccount=false){
