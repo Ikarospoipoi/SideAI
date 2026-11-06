@@ -1,0 +1,21 @@
+.build/
+build/
+.DS_Store
+docs/protocol/
+.swiftpm/
+__pycache__/
+*.pyc
+windows/node_modules/
+windows/dist/
+windows/release/
+*.log
+.env
+.env.*
+*.pem
+*.key
+# Local validation captures may include private paths or conversation excerpts.
+docs/*-validation.json
+docs/performance-samples.json
+Resources/AppIcon.icns
+docs/screenshots/
+docs/*.docx
