@@ -89,4 +89,18 @@ final class RemoteHostTests: XCTestCase {
     XCTAssertTrue(host.snapshot()["approvals"].array.isEmpty)
   }
 
+  @MainActor func testRemoteSendWaitsForCodexHistoryRestore() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let store = SessionStore(directory: dir); defer { store.shutdown() }
+    store.settings.connectedAgentIDs = [ConnectionRoute.codex.id]; store.newConversation(route: .codex)
+    let id = try XCTUnwrap(store.selectedID), device = UUID().uuidString, nonce = UUID().uuidString
+    store.mutate(id) { $0.threadID = "not-restored-yet" }; store.ready = true
+    let host = RemoteHost(store: store, loadSaved: false)
+    host.configuration = RemoteHostConfiguration(pairing: try RemotePairing(relay: "ws://127.0.0.1:8787/v1/connect", name: "Fixture"), deviceID: device); host.enabled = true
+    host.receive(.object(["kind": .string("hello"), "device": .string(device), "nonce": .string(nonce), "time": .number(Date().timeIntervalSince1970)]))
+    host.receive(.object(["kind": .string("command"), "op": .string("send"), "id": .string(UUID().uuidString), "nonce": .string(nonce), "challenge": host.snapshot()["challenge"], "time": .number(Date().timeIntervalSince1970), "conversation": .string(id.uuidString), "revision": .string(host.revision(store.selected!)), "text": .string("must wait")]))
+    XCTAssertTrue(store.selected!.items.isEmpty); XCTAssertTrue(store.selected!.draft.isEmpty); XCTAssertFalse(store.preparingMemory)
+  }
+
 }

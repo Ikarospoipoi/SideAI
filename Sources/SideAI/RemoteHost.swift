@@ -155,6 +155,10 @@ struct RemoteHostConfiguration: Codable {
       return
     }
     if operation == "send" {
+      // select() restores Codex history asynchronously. Never race that restore with a new turn.
+      guard c.engine != .codex || c.threadID == nil || store.restored.contains(id) else {
+        throw RemoteError.message(store.ready ? "正在同步这条任务的历史，请稍后再发送。" : "请先刷新模型／电脑连接，再继续这条任务。")
+      }
       let text = message["text"].text
       guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.count <= 50000 else { throw RemoteError.message("消息为空或过长") }
       guard c.draft.isEmpty, c.images.isEmpty else { throw RemoteError.message("电脑有未发送草稿，请先处理或在手机新建会话") }
