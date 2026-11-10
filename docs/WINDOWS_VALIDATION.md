@@ -4,6 +4,14 @@
 
 已在 [最终 Windows CI](https://github.com/Ikarospoipoi/SideAI/actions/runs/42183878864) 完成 32 项测试、原生 Win32 启动检查和打包后程序检查，并生成 NSIS 安装包和 ZIP（代码提交 `40af660`）。Runner 为 Windows Server 2025，不能代替 Windows 11 游戏实测。Mac 原生版本另通过 53 项测试，2 项按条件跳过。
 
+## v0.10.0 跨会话记忆（2026-11-10）
+
+[最终 Windows CI](https://github.com/Ikarospoipoi/SideAI/actions/runs/42767790468) 通过 39 项测试和源码 / 安装包启动检查；记忆窗口通过真实 IPC 调用本地检索线程，验证 SQL 来源可见。Mac 通过 62 项测试（其中 2 项按条件跳过），已构建并重启。
+
+在本机现有导入记录中，以「之前 SQL 的 TRACE_ID 怎么关联？」预览成功找到「SQL错误分析」。只做本地检索，未发送用户历史给模型。协议与流程测试验证：所有聊天接口和 Agent 携带来源、停用 / 排除有效、本地消息无检索前缀污染、审批权限保持不变、已有会话的简单续聊不会换成另一条最近任务。
+
+这不代表官网内部记忆或跨设备同步，也不增加 Windows 实际游戏验证范围。详见 [跨会话记忆说明](CROSS_CONVERSATION_MEMORY.md)。
+
 ## 自动化
 
 - TypeScript 严格编译。
