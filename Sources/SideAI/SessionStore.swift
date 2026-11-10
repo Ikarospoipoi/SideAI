@@ -53,6 +53,11 @@ import SwiftUI
   @Published var loginURL: URL?
   @Published var panelState: PanelState = .collapsed
   @Published var hotkeyError: String?
+  private var remoteHostBacking: RemoteHost?
+  var remoteHost: RemoteHost {
+    if let remoteHostBacking { return remoteHostBacking }
+    let host = RemoteHost(store: self); remoteHostBacking = host; return host
+  }
   let client = CodexAppServerClient()
   let persistence: Persistence
   let scratch: URL
@@ -491,6 +496,7 @@ import SwiftUI
     } catch { banner = "保存失败：\(error.localizedDescription)" }
   }
   func shutdown() {
+    remoteHostBacking?.stop()
     cancelAccountLogin()
     memoryPreparationTask?.cancel()
     for task in accountTasks.values { task.cancel() }

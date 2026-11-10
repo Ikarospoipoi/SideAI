@@ -1,5 +1,7 @@
 # SideAI
 
+**iPhone 遥控（v0.11.0）：** 新增原生 iOS 客户端和 macOS 手机遥控入口，支持异地查看任务、发指令、切模型及审批。附带自托管加密中继，先用 Xcode 安装到自己的 iPhone。见 [安装与部署指南](docs/IOS_REMOTE.md)。
+
 **Windows 版本：** 新增 `windows/` 客户端，支持游戏内热键唤出、鼠标释放、返回原窗口，以及聊天 / Agent 连接。安装、功能对照与游戏兼容边界见 [Windows 使用指南](windows/README.md)。Windows 安装包由 [GitHub Actions](https://github.com/Ikarospoipoi/SideAI/actions/workflows/windows.yml) 构建。
 
 **跨会话记忆（v0.10.1）：** 聊天和 Agent 发送后自动参考本地旧对话及导入历史，来源随每轮回复折叠显示，输入框旁可开关记忆。详见 [记忆使用说明](docs/CROSS_CONVERSATION_MEMORY.md)。

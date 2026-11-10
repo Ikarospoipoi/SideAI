@@ -1,0 +1,482 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		211006063F00FA499302B0CC /* SideAIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A12BCAC60E5CD761B2E2B2F1 /* SideAIApp.swift */; };
+		301B9B5C87A6F67803807FBC /* RemoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6492429543A2BC4FC50A6845 /* RemoteStore.swift */; };
+		771B8F93DF8CDC126E8B78A7 /* SideAIUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4214FBA398BA2902D378A9C /* SideAIUITests.swift */; };
+		9384A5A66CEE4F2441330686 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DE7F187A419692F98FE1010 /* PairingView.swift */; };
+		9DAC476690778249F6230DD2 /* SideAIRemote in Frameworks */ = {isa = PBXBuildFile; productRef = 77AEB8D8166F1BFD26B7A068 /* SideAIRemote */; };
+		A68324D6DB56F9CFAB0D353B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB75876ECBD10C3B18DCD91E /* Foundation.framework */; };
+		BE983852A04178F3453A067F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB75876ECBD10C3B18DCD91E /* Foundation.framework */; };
+		D42CF8ECCFBAB26FAC597A18 /* RemoteHome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 555CE134B737C1E9ACBAF7F0 /* RemoteHome.swift */; };
+		D8F00DE79F2ED7CF494CECEF /* RemoteApprovalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BE23963D7F07EFBE880C566 /* RemoteApprovalView.swift */; };
+		E7C1FC58758A2D3C90412DDE /* RemoteModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10E539FD705BC10EC34EAB57 /* RemoteModelView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		719449B6015E631840C177F7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A5ECF6E9015A61C86F97501 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C6685792822A663BEC0CDDE7;
+			remoteInfo = SideAIPhone;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		10E539FD705BC10EC34EAB57 /* RemoteModelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteModelView.swift; sourceTree = "<group>"; };
+		3AC4A2451CE899C3DF92C5DB /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		555CE134B737C1E9ACBAF7F0 /* RemoteHome.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteHome.swift; sourceTree = "<group>"; };
+		6492429543A2BC4FC50A6845 /* RemoteStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteStore.swift; sourceTree = "<group>"; };
+		6BE23963D7F07EFBE880C566 /* RemoteApprovalView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteApprovalView.swift; sourceTree = "<group>"; };
+		7DE7F187A419692F98FE1010 /* PairingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
+		A12BCAC60E5CD761B2E2B2F1 /* SideAIApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SideAIApp.swift; sourceTree = "<group>"; };
+		B1541D26234FEE4AC6A27513 /* SideAIPhone.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SideAIPhone.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB75876ECBD10C3B18DCD91E /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		D4214FBA398BA2902D378A9C /* SideAIUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SideAIUITests.swift; sourceTree = "<group>"; };
+		EEB9E626A46CF9AA1FE79D54 /* SideAIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SideAIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		070A414171FB3447A1816F56 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A68324D6DB56F9CFAB0D353B /* Foundation.framework in Frameworks */,
+				9DAC476690778249F6230DD2 /* SideAIRemote in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		75ABAED785DA633D30157E33 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BE983852A04178F3453A067F /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		26664090FDE3E433FFC441CA /* SideAIUITests */ = {
+			isa = PBXGroup;
+			children = (
+				D4214FBA398BA2902D378A9C /* SideAIUITests.swift */,
+			);
+			name = SideAIUITests;
+			path = SideAIUITests;
+			sourceTree = "<group>";
+		};
+		2C43641EDA26D8939DCBBD2C /* SideAI */ = {
+			isa = PBXGroup;
+			children = (
+				7DE7F187A419692F98FE1010 /* PairingView.swift */,
+				6BE23963D7F07EFBE880C566 /* RemoteApprovalView.swift */,
+				555CE134B737C1E9ACBAF7F0 /* RemoteHome.swift */,
+				10E539FD705BC10EC34EAB57 /* RemoteModelView.swift */,
+				6492429543A2BC4FC50A6845 /* RemoteStore.swift */,
+				A12BCAC60E5CD761B2E2B2F1 /* SideAIApp.swift */,
+				3AC4A2451CE899C3DF92C5DB /* Info.plist */,
+			);
+			name = SideAI;
+			path = SideAI;
+			sourceTree = "<group>";
+		};
+		876BDA288FABEC056A18C72E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B1541D26234FEE4AC6A27513 /* SideAIPhone.app */,
+				EEB9E626A46CF9AA1FE79D54 /* SideAIUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CE44F2E4A6CC8D689256117B /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E3D273F1B196B98478728C14 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D2EB38254AAE8270D10E9596 = {
+			isa = PBXGroup;
+			children = (
+				876BDA288FABEC056A18C72E /* Products */,
+				CE44F2E4A6CC8D689256117B /* Frameworks */,
+				2C43641EDA26D8939DCBBD2C /* SideAI */,
+				26664090FDE3E433FFC441CA /* SideAIUITests */,
+			);
+			sourceTree = "<group>";
+		};
+		E3D273F1B196B98478728C14 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				CB75876ECBD10C3B18DCD91E /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A724F154F2D479479B6122DE /* SideAIUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2C10A4E6C372F9667C3C557E /* Build configuration list for PBXNativeTarget "SideAIUITests" */;
+			buildPhases = (
+				801DE15B3FA776CDA3AFB54E /* Sources */,
+				75ABAED785DA633D30157E33 /* Frameworks */,
+				8E3102A2914BEBFB21B74813 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C6C00897876A59FAFE178579 /* PBXTargetDependency */,
+			);
+			name = SideAIUITests;
+			productName = SideAIUITests;
+			productReference = EEB9E626A46CF9AA1FE79D54 /* SideAIUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		C6685792822A663BEC0CDDE7 /* SideAIPhone */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 354892361818A852F0B3DCF7 /* Build configuration list for PBXNativeTarget "SideAIPhone" */;
+			buildPhases = (
+				DD570611C78055D50B3217D3 /* Sources */,
+				070A414171FB3447A1816F56 /* Frameworks */,
+				01ED6A0B828FFBA0073A78DD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SideAIPhone;
+			packageProductDependencies = (
+				77AEB8D8166F1BFD26B7A068 /* SideAIRemote */,
+			);
+			productName = SideAIPhone;
+			productReference = B1541D26234FEE4AC6A27513 /* SideAIPhone.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		4A5ECF6E9015A61C86F97501 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1300;
+				LastUpgradeCheck = 1300;
+			};
+			buildConfigurationList = 22F9A8A50A4F9E29F67826B4 /* Build configuration list for PBXProject "SideAI" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D2EB38254AAE8270D10E9596;
+			packageReferences = (
+				48D443262F55EDDA1500A92D /* XCLocalSwiftPackageReference "LocalSwiftPackageReference" */,
+			);
+			productRefGroup = 876BDA288FABEC056A18C72E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C6685792822A663BEC0CDDE7 /* SideAIPhone */,
+				A724F154F2D479479B6122DE /* SideAIUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		01ED6A0B828FFBA0073A78DD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E3102A2914BEBFB21B74813 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		801DE15B3FA776CDA3AFB54E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				771B8F93DF8CDC126E8B78A7 /* SideAIUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DD570611C78055D50B3217D3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9384A5A66CEE4F2441330686 /* PairingView.swift in Sources */,
+				D8F00DE79F2ED7CF494CECEF /* RemoteApprovalView.swift in Sources */,
+				D42CF8ECCFBAB26FAC597A18 /* RemoteHome.swift in Sources */,
+				E7C1FC58758A2D3C90412DDE /* RemoteModelView.swift in Sources */,
+				301B9B5C87A6F67803807FBC /* RemoteStore.swift in Sources */,
+				211006063F00FA499302B0CC /* SideAIApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C6C00897876A59FAFE178579 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = SideAIPhone;
+			target = C6685792822A663BEC0CDDE7 /* SideAIPhone */;
+			targetProxy = 719449B6015E631840C177F7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1E7989BD740CF7E05D737EB7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ikarospoipoi.SideAI.Remote.UITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = SideAIPhone;
+			};
+			name = Debug;
+		};
+		7E2A905B7A75891EDE2B3940 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = SideAI/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 0.11.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ikarospoipoi.SideAI.Remote;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		85D9A7DC04AED2A1E81DC605 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		879E1546889EEB4CED40CE3A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		93C401D037F2606295502B73 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ikarospoipoi.SideAI.Remote.UITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = SideAIPhone;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D2D2A7C52385194BF2AD3218 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = SideAI/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 0.11.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.ikarospoipoi.SideAI.Remote;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		22F9A8A50A4F9E29F67826B4 /* Build configuration list for PBXProject "SideAI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				879E1546889EEB4CED40CE3A /* Debug */,
+				85D9A7DC04AED2A1E81DC605 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2C10A4E6C372F9667C3C557E /* Build configuration list for PBXNativeTarget "SideAIUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				93C401D037F2606295502B73 /* Release */,
+				1E7989BD740CF7E05D737EB7 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		354892361818A852F0B3DCF7 /* Build configuration list for PBXNativeTarget "SideAIPhone" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7E2A905B7A75891EDE2B3940 /* Release */,
+				D2D2A7C52385194BF2AD3218 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		48D443262F55EDDA1500A92D /* XCLocalSwiftPackageReference "LocalSwiftPackageReference" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		77AEB8D8166F1BFD26B7A068 /* SideAIRemote */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 48D443262F55EDDA1500A92D /* XCLocalSwiftPackageReference "LocalSwiftPackageReference" */;
+			productName = SideAIRemote;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 4A5ECF6E9015A61C86F97501 /* Project object */;
+}

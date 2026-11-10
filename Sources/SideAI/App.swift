@@ -37,6 +37,7 @@ import SwiftUI
     main.addItem(editItem)
     NSApp.mainMenu = main
     store = SessionStore()
+    store.remoteHost.resume()
     controller = EdgePanelController(store: store)
     controller.showSettings = { [weak self] in self?.settings() }
     store.onRouteOpen = { [weak self] in self?.controller.expand() }

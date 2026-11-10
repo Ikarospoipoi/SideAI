@@ -1,0 +1,47 @@
+name: iOS and remote control
+on:
+  push:
+    paths: ['ios/**', 'shared/**', 'Sources/**', 'Tests/**', 'Package.swift', 'remote-relay/**', '.github/workflows/remote.yml']
+  pull_request:
+    paths: ['ios/**', 'shared/**', 'Sources/**', 'Tests/**', 'Package.swift', 'remote-relay/**', '.github/workflows/remote.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  remote:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+        working-directory: remote-relay
+      - run: npm test
+        working-directory: remote-relay
+      - run: swift test
+      - name: Build iOS for simulator without signing
+        run: xcodebuild -project ios/SideAI.xcodeproj -scheme SideAI -sdk iphonesimulator -configuration Debug -derivedDataPath build/ios CODE_SIGNING_ALLOWED=NO build
+  relay-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deploy configuration
+        working-directory: remote-relay
+        run: RELAY_DOMAIN=relay.example.com docker compose config --quiet
+      - name: Build relay container
+        run: docker build -t sideai-relay-test remote-relay
+      - name: Check container health and non-root user
+        run: |
+          docker run -d --name relay-test --read-only --cap-drop ALL --security-opt no-new-privileges -p 127.0.0.1:8787:8787 sideai-relay-test
+          test "$(docker exec relay-test id -u)" != "0"
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8787/health; then exit 0; fi
+            sleep 1
+          done
+          docker logs relay-test
+          exit 1
+      - if: always()
+        run: docker rm -f relay-test || true

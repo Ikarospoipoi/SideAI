@@ -21,3 +21,8 @@ docs/screenshots/
 docs/*.docx
 
 /windows/build-runtime/
+
+remote-relay/node_modules/
+ios/DerivedData/
+**/xcuserdata/
+*.xcresult/

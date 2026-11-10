@@ -83,6 +83,7 @@ struct SettingsView: View {
     TabView(selection: $tab) {
       ConnectionManagerView(store: store, configure: { store.addingConnection = true; tab = 4 }).tabItem { Label("连接管理", systemImage: "network") }.tag(0)
       ConnectionsSettings(store: store).tabItem { Label("添加 AI", systemImage: "plus.circle") }.tag(4)
+      RemoteHostSettings(host: store.remoteHost).tabItem { Label("手机遥控", systemImage: "iphone") }.tag(5)
       HistorySettings(store: store).tabItem { Label("会话", systemImage: "bubble.left.and.bubble.right") }.tag(1)
       MemorySettings(store: store).tabItem { Label("跨会话记忆", systemImage: "brain") }.tag(3)
       AppearanceSettingsView(store: store).tabItem { Label("侧栏与快捷键", systemImage: "sidebar.left") }.tag(2)
