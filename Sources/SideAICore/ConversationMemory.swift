@@ -80,7 +80,7 @@ public enum ConversationMemory {
       }
       if bestScore > 0 { hits.append(Hit(c: c, text: bestText, score: bestScore)) }
     }
-    if hits.isEmpty && refersBack && tokens.isEmpty {
+    if hits.isEmpty && refersBack && tokens.isEmpty && !current.items.contains(where: { ["userMessage", "agentMessage"].contains($0.kind) && $0.status == "completed" }) {
       // An explicit “continue the previous task” can use one recent conversation.
       if let c = conversations.filter({ $0.id != current.id && $0.memoryExcluded != true && $0.items.contains { ["userMessage", "agentMessage"].contains($0.kind) && $0.status == "completed" } }).max(by: { $0.updatedAt < $1.updatedAt }) {
         let text = c.items.filter { ["userMessage", "agentMessage"].contains($0.kind) && $0.status == "completed" }.suffix(4).map { ($0.kind == "userMessage" ? "用户：" : "回答：") + MemoryContext.originalMessage($0.text) }.joined(separator: "\n")

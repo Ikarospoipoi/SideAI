@@ -27,6 +27,10 @@ final class MemoryTests: XCTestCase {
     XCTAssertTrue(ConversationMemory.retrieve(query: "之前的 volcano", current: current, conversations: [old]).isEmpty)
     XCTAssertEqual(ConversationMemory.retrieve(query: "继续上一个任务", current: current, conversations: [old]).sources.first?.id, old.id.uuidString)
   }
+  func testContinueInExistingConversationDoesNotPullUnrelatedRecentTask() {
+    let current = source("当前讨论", "正在讨论当前任务"), old = source("其他任务", "另一个任务背景")
+    XCTAssertTrue(ConversationMemory.retrieve(query: "继续上一个任务", current: current, conversations: [old, current]).isEmpty)
+  }
   func testBoundedSourcesAndNotesWithConflictingRecordsPreserved() {
     let docs = (0..<10).map { source("SQL \($0)", "TRACE_ID belongs to table\($0)") }
     let memory = ConversationMemory.retrieve(query: "TRACE_ID", current: Conversation(cwd: "/tmp"), conversations: docs, notes: String(repeating: "偏", count: 3000))

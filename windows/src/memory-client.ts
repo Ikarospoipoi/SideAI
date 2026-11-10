@@ -12,7 +12,7 @@ export class MemoryClient {
     for(const c of conversations){if(c.memoryExcluded)continue;valid.add(c.id);const items=c.items.filter(i=>['user','assistant'].includes(i.role)&&(!i.status||i.status==='completed')&&i.text);
       const key=JSON.stringify([c.title,c.updated,c.cwd,c.mode,items.map(i=>[i.id,i.text.length,i.status])]);if(this.keys.get(c.id)===key)continue;this.keys.set(c.id,key);changed.push({id:c.id,title:c.title,updated:c.updated,cwd:c.cwd,mode:c.mode,items:items.map(i=>({role:i.role,text:i.text}))});}
     const removed=[...this.keys.keys()].filter(id=>!valid.has(id));for(const id of removed)this.keys.delete(id);
-    const worker=this.worker,id=++this.next;worker.ref();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>this.close(Error('本地历史检索超时，请重试')),60000);this.pending.set(id,{resolve,reject,timer});worker.postMessage({id,changed,removed,query:current.draft,current:{id:current.id,cwd:current.cwd,mode:current.mode},notes});});
+    const worker=this.worker,id=++this.next;worker.ref();return new Promise((resolve,reject)=>{const timer=setTimeout(()=>this.close(Error('本地历史检索超时，请重试')),60000);this.pending.set(id,{resolve,reject,timer});worker.postMessage({id,changed,removed,query:current.draft,current:{id:current.id,cwd:current.cwd,mode:current.mode,hasHistory:current.items.some(i=>['user','assistant'].includes(i.role)&&(!i.status||i.status==='completed'))},notes});});
   }
   close(error=Error('记忆检索已取消')){const w=this.worker;this.worker=undefined;this.keys.clear();for(const p of this.pending.values()){clearTimeout(p.timer);p.reject(error);}this.pending.clear();void w?.terminate();}
 }
