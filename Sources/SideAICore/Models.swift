@@ -81,6 +81,9 @@ public struct Conversation: Codable, Identifiable {
   public var claudeSessionID: String?
   public var claudeHasSession: Bool?
   public var resolvedModel: String?
+  public var memoryExcluded: Bool?
+  public var memoryEnabled: Bool?
+  public var lastMemory: MemoryContext?
   public var handoff: HandoffLink?
   public var claudeAgentEnabled: Bool?
   public var accountRuntime: AccountRuntime?
@@ -243,7 +246,7 @@ public struct EventState {
     var detail = ""
     switch type {
     case "userMessage":
-      text = raw["content"].array.compactMap { $0["text"].string }.joined(separator: "\n")
+      text = MemoryContext.originalMessage(raw["content"].array.compactMap { $0["text"].string }.joined(separator: "\n"))
     case "commandExecution":
       text = raw["command"].text
       detail = raw["aggregatedOutput"].text

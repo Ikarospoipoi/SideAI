@@ -36,6 +36,7 @@ import SwiftUI
   @Published var syncing = false
   @Published var chatgptLoginStatus = "可新增官方授权，或使用下方已保存的连接。"
   @Published var chatgptSigningIn = false
+  @Published var preparingMemory = false
   @Published var preparingAPI = false
   @Published var credentialAuthorizing = false
   @Published var settingsRequest = UUID()
@@ -66,7 +67,7 @@ import SwiftUI
   private var deltaFlush: Task<Void, Never>?
   private var canPersist = true
   var selected: Conversation? { state.conversations.first { $0.id == selectedID } }
-  var isBusy: Bool { accountSigningIn != nil || preparingAPI || credentialAuthorizing || !testingProfiles.isEmpty || state.conversations.contains { $0.status.isActive } || !loading.isEmpty }
+  var isBusy: Bool { preparingMemory || accountSigningIn != nil || preparingAPI || credentialAuthorizing || !testingProfiles.isEmpty || state.conversations.contains { $0.status.isActive } || !loading.isEmpty }
   var pending: [PendingRequest] { state.pending }
   var approvalCount: Int { pending.count + claudeApprovals.count }
   var activeCount: Int { state.conversations.filter { $0.status.isActive }.count }
@@ -306,10 +307,21 @@ import SwiftUI
   }
   func send() {
     guard !isBusy, !syncing, let c = selected, c.canSendContent else { return }
+    preparingMemory = true
+    Task {
+      let memory = await memoryContext(for: c)
+      preparingMemory = false
+      guard selectedID == c.id, selected?.draft == c.draft, selected?.images == c.images else { banner = "输入已变更，请再次发送。"; return }
+      mutate(c.id) { $0.lastMemory = memory }
+      dispatchSend(c, memory: memory)
+    }
+  }
+  private func dispatchSend(_ c: Conversation, memory: MemoryContext) {
+    guard !isBusy, !syncing else { return }
     guard isRouteActive(route(for: c)) else { banner = "此连接未选中。请通过顶部连接菜单选择；聊天和 Agent 连接互不影响。"; return }
-    if c.engine == .accountRuntime { sendAccount(c); return }
-    if c.engine == .claude { sendClaude(c); return }
-    if c.engine == .api { sendAPI(c); return }
+    if c.engine == .accountRuntime { sendAccount(c, memory: memory); return }
+    if c.engine == .claude { sendClaude(c, memory: memory); return }
+    if c.engine == .api { sendAPI(c, memory: memory); return }
     guard c.engine == .codex, ready else { return }
     if let tid = c.threadID, externalThreads.contains(tid) { banner = "此会话正在其他客户端运行，请稍后同步。"; return }
     if !c.images.isEmpty, codexModels.first(where: { $0.id == c.modelID })?.supportsImages == false {
@@ -347,7 +359,7 @@ import SwiftUI
         }
         // Persist the thread ID before any potentially side-effecting turn is sent.
         saveNow()
-        _ = try await client.request("turn/start", c.codexTurnParams(threadID: tid))
+        _ = try await client.request("turn/start", c.codexTurnParams(threadID: tid, memory: memory))
         // Enable interrupt only after turn/started, not merely the acceptance response.
       } catch {
         mutate(c.id) {

@@ -61,9 +61,10 @@ extension Conversation {
   public var images: [ImageAttachment] { attachments ?? [] }
   public var isGPT: Bool { engine == .api || engine == .chatgptArchive || originCategory == "chatgpt" }
   public var canSendContent: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty }
-  public func codexTurnParams(threadID: String) -> JSON {
+  public func codexTurnParams(threadID: String, memory: MemoryContext? = nil) -> JSON {
     var input: [JSON] = []
-    if !draft.isEmpty { input.append(.object(["type": .string("text"), "text": .string(draft)])) }
+    let text = memory?.augment(draft) ?? draft
+    if !text.isEmpty { input.append(.object(["type": .string("text"), "text": .string(text)])) }
     input += images.map { .object(["type": .string("localImage"), "path": .string($0.path)]) }
     var params: [String: JSON] = ["threadId": .string(threadID), "input": .array(input),
       "cwd": .string(cwd), "approvalPolicy": .string("on-request"), "approvalsReviewer": .string("user"), "sandboxPolicy": mode.policy(cwd: cwd)]
@@ -75,15 +76,16 @@ extension Conversation {
 
 public enum APIRequestBuilder {
   /// Full local context, no tool declarations and no automatic cross-provider response IDs.
-  public static func body(conversation: Conversation, format: APIFormat, model: String) throws -> JSON {
+  public static func body(conversation: Conversation, format: APIFormat, model: String, memory: MemoryContext? = nil) throws -> JSON {
     guard !model.isEmpty else { throw ProtocolError.message("请先选择或输入模型 ID") }
     let history = conversation.items.filter { ["userMessage", "agentMessage"].contains($0.kind) && $0.status == "completed" }
     var rows: [JSON] = []
     for item in history {
       let role = item.kind == "userMessage" ? "user" : "assistant"
       var parts: [JSON] = []
-      if !item.text.isEmpty {
-        parts.append(.object(["type": .string(format != .responses ? "text" : role == "user" ? "input_text" : "output_text"), "text": .string(item.text)]))
+      let text = item.id == history.last(where: { $0.kind == "userMessage" })?.id ? memory?.augment(item.text) ?? item.text : item.text
+      if !text.isEmpty {
+        parts.append(.object(["type": .string(format != .responses ? "text" : role == "user" ? "input_text" : "output_text"), "text": .string(text)]))
       }
       for attachment in item.attachments ?? [] where role == "user" {
         let url = try attachment.dataURL()

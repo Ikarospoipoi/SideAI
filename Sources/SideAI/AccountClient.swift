@@ -96,7 +96,7 @@ import SideAICore
     }
     return options(session["configOptions"].array.first { $0["category"].text == "model" || $0["id"].text == "model" }?["options"].array ?? [])
   }
-  nonisolated static func prompt(_ conversation: Conversation) throws -> JSON {
+  nonisolated static func prompt(_ conversation: Conversation, memory: MemoryContext? = nil) throws -> JSON {
     var blocks = [JSON]()
     for item in conversation.items where ["userMessage", "agentMessage"].contains(item.kind) && item.status == "completed" {
       blocks.append(.object(["type": .string("text"), "text": .string((item.kind == "userMessage" ? "User: " : "Assistant: ") + item.text)]))
@@ -104,7 +104,7 @@ import SideAICore
         blocks.append(.object(["type": .string("image"), "mimeType": .string(image.mimeType), "data": .string(try Data(contentsOf: URL(fileURLWithPath: image.path)).base64EncodedString())]))
       }
     }
-    blocks.append(.object(["type": .string("text"), "text": .string("User: " + conversation.draft)]))
+    blocks.append(.object(["type": .string("text"), "text": .string("User: " + (memory?.augment(conversation.draft) ?? conversation.draft))]))
     for image in conversation.images {
       blocks.append(.object(["type": .string("image"), "mimeType": .string(image.mimeType), "data": .string(try Data(contentsOf: URL(fileURLWithPath: image.path)).base64EncodedString())]))
     }

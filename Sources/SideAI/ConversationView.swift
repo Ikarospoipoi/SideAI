@@ -257,6 +257,7 @@ struct ConversationView: View {
           Button("连接设置") { controller.showSettings?() }.buttonStyle(.plain).font(.caption)
         }
       }.foregroundStyle(.secondary)
+      MemoryIndicator(store: store)
       if let c = store.selected, !c.images.isEmpty {
         AttachmentStrip(images: c.images) { image in
           store.mutate(c.id) { $0.attachments = $0.images.filter { $0.id != image.id } }

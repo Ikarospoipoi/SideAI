@@ -84,7 +84,7 @@ struct SettingsView: View {
       ConnectionManagerView(store: store, configure: { store.addingConnection = true; tab = 4 }).tabItem { Label("连接管理", systemImage: "network") }.tag(0)
       ConnectionsSettings(store: store).tabItem { Label("添加 AI", systemImage: "plus.circle") }.tag(4)
       HistorySettings(store: store).tabItem { Label("会话", systemImage: "bubble.left.and.bubble.right") }.tag(1)
-      MemorySettings(store: store).tabItem { Label("记忆笔记", systemImage: "note.text") }.tag(3)
+      MemorySettings(store: store).tabItem { Label("跨会话记忆", systemImage: "brain") }.tag(3)
       AppearanceSettingsView(store: store).tabItem { Label("侧栏与快捷键", systemImage: "sidebar.left") }.tag(2)
     }.padding(12).frame(width: 700, height: 740).tint(.gray)
       .onAppear { if store.addingConnection || store.apiSetupProvider != nil || store.editingProfileID != nil { tab = 4 } }
@@ -95,13 +95,22 @@ struct SettingsView: View {
 
 struct MemorySettings: View {
   @ObservedObject var store: SessionStore
+  @State private var search = ""
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text("我的记忆笔记").font(.title3.bold())
-      Text("在本机保存偏好、项目背景或摘要。不会自动从对话提取，也不会自动发送给任何服务商；交接任务时可以勾选并预览。").font(.callout).foregroundStyle(.secondary)
+      Text("跨会话记忆").font(.title3.bold())
+      Toggle("新会话自动查找相关历史", isOn: Binding(get: { store.settings.crossConversationMemory != false }, set: { store.settings.crossConversationMemory = $0; store.saveSoon() })).disabled(store.isBusy)
+      Text("聊天与 Agent 共用本地历史，包含导入的记录。每次发送只带相关摘录和下方笔记，交给当前连接的服务商。可在输入框上方查看来源；各家官网内部记忆不会自动同步。").font(.callout).foregroundStyle(.secondary)
+      Text("记忆笔记：长期偏好、项目背景或重要结论").font(.headline)
       TextEditor(text: Binding(get: { store.settings.sharedMemory ?? "" }, set: { store.settings.sharedMemory = $0; store.saveSoon() }))
-        .font(.body).border(.primary.opacity(0.15))
-      Text("原 Agent 的权限、工具调用和官网记忆不包含在这些笔记中。").font(.caption).foregroundStyle(.secondary)
+        .font(.body).frame(height: 100).border(.primary.opacity(0.15))
+      Text("开启记忆时自动携带前 2,000 字。旧任务不构成执行授权，Agent 仍按当前权限审批。").font(.caption).foregroundStyle(.secondary)
+      TextField("查找会话，设置是否参与记忆", text: $search).textFieldStyle(.roundedBorder)
+      ScrollView { LazyVStack(alignment: .leading) {
+        ForEach(store.state.conversations.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }.sorted { $0.updatedAt > $1.updatedAt }) { c in
+          Toggle(c.title, isOn: Binding(get: { c.memoryExcluded != true }, set: { value in store.mutate(c.id) { $0.memoryExcluded = !value } })).disabled(store.isBusy)
+        }
+      } }
     }.padding(20)
   }
 }

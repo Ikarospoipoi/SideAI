@@ -136,14 +136,14 @@ extension SessionStore {
       } catch { claudeReady = false; claudeStatus = error.localizedDescription }
     }
   }
-  func sendClaude(_ original: Conversation) {
+  func sendClaude(_ original: Conversation, memory: MemoryContext? = nil) {
     guard claudeReady, let path = ClaudeCodeClient.findCLI(custom: settings.claudePath ?? "") else { banner = "请先在设置中检测 Claude Code 登录。"; return }
     var c = original
     if c.claudeUsesTools && c.mode == .project && c.cwd == scratch.path { banner = "请先选择项目目录。"; return }
     if c.claudeSessionID == nil { c.claudeSessionID = UUID().uuidString.lowercased() }
     do {
       let args = try ClaudeProtocol.arguments(conversation: c)
-      var input = try JSONEncoder().encode(ClaudeProtocol.input(c)); input.append(10)
+      var input = try JSONEncoder().encode(ClaudeProtocol.input(c, memory: memory)); input.append(10)
       let cwd = c.claudeUsesTools ? URL(fileURLWithPath: c.cwd) : scratch.appendingPathComponent("Claude", isDirectory: true)
       try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
       let responseID = UUID().uuidString

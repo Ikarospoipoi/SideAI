@@ -1,3 +1,4 @@
+import {MemoryContext,augment} from './memory';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -103,4 +104,4 @@ export async function startACP(runtime:Runtimes,c:Connection){
   rpc.on('event',m=>{if(m.id!==undefined){if(m.method==='session/request_permission')rpc.reply(m.id,{outcome:{outcome:'cancelled'}});else rpc.reject(m.id);}});
   try{const info=await rpc.request('initialize',{protocolVersion:1,clientInfo:{name:'SideAI',version:'0.9.0'},clientCapabilities:{fs:{readTextFile:false,writeTextFile:false},terminal:false}});return {rpc,info};}catch(e){rpc.stop();throw e;}
 }
-export function acpPrompt(c:Conversation){return c.items.filter(i=>['user','assistant'].includes(i.role)&&(!i.status||i.status==='completed')).flatMap(i=>[{type:'text',text:(i.role==='user'?'User: ':'Assistant: ')+i.text},...(i.images??[]).map(a=>({type:'image',mimeType:'image/png',data:a.dataURL.split(',')[1]}))]);}
+export function acpPrompt(c:Conversation,memory?:MemoryContext){const last=c.items.filter(i=>i.role==='user').at(-1)?.id;return c.items.map(i=>i.id===last?{...i,text:augment(i.text,memory)}:i).filter(i=>['user','assistant'].includes(i.role)&&(!i.status||i.status==='completed')).flatMap(i=>[{type:'text',text:(i.role==='user'?'User: ':'Assistant: ')+i.text},...(i.images??[]).map(a=>({type:'image',mimeType:'image/png',data:a.dataURL.split(',')[1]}))]);}

@@ -14,9 +14,10 @@ public enum ClaudeProtocol {
     if let effort = conversation.reasoningEffort, !effort.isEmpty { args += ["--effort", effort] }
     return args
   }
-  public static func input(_ conversation: Conversation) throws -> JSON {
+  public static func input(_ conversation: Conversation, memory: MemoryContext? = nil) throws -> JSON {
     var content: [JSON] = []
-    if !conversation.draft.isEmpty { content.append(.object(["type": .string("text"), "text": .string(conversation.draft)])) }
+    let text = memory?.augment(conversation.draft) ?? conversation.draft
+    if !text.isEmpty { content.append(.object(["type": .string("text"), "text": .string(text)])) }
     for image in conversation.images {
       let data = try Data(contentsOf: URL(fileURLWithPath: image.path))
       content.append(.object(["type": .string("image"), "source": .object(["type": .string("base64"), "media_type": .string(image.mimeType), "data": .string(data.base64EncodedString())])]))

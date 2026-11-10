@@ -96,7 +96,7 @@ extension SessionStore {
       } catch { connectionNotice = error.localizedDescription.replacingOccurrences(of: key, with: "[redacted]") }
     }
   }
-  func sendAPI(_ c: Conversation) {
+  func sendAPI(_ c: Conversation, memory: MemoryContext? = nil) {
     guard let profile = profiles.first(where: { $0.id == c.profileID }) else { banner = "请在设置中添加 API 连接，并新建该连接的会话。"; return }
     preparingAPI = true
     apiTasks[c.id] = Task {
@@ -110,7 +110,7 @@ extension SessionStore {
         var context = c
         var user = TimelineItem(kind: "userMessage", text: c.draft); user.attachments = c.images
         context.items.append(user)
-        let body = try APIRequestBuilder.body(conversation: context, format: profile.format, model: c.modelID ?? profile.defaultModel)
+        let body = try APIRequestBuilder.body(conversation: context, format: profile.format, model: c.modelID ?? profile.defaultModel, memory: memory)
         banner = nil
         let itemID = UUID().uuidString; responseID = itemID
         mutate(c.id) {

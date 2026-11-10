@@ -1,3 +1,4 @@
+import type {MemoryContext} from './memory';
 export type Format = 'responses' | 'chatCompletions' | 'anthropic';
 export type Engine = 'api' | 'chatgpt' | 'openrouter' | 'codex' | 'claude' | 'kimi' | 'grok' | 'gemini';
 export type Workspace = 'chat' | 'agent';
@@ -5,8 +6,8 @@ export interface Model { id: string; name: string; efforts?: string[] }
 export interface Connection { id: string; name: string; provider: string; engine: Engine; workspace: Workspace; endpoint?: string; format?: Format; model?: string; executable?: string; models: Model[] }
 export interface Attachment { id: string; name: string; path: string; dataURL: string }
 export interface Item { id: string; role: 'user'|'assistant'|'tool'|'reasoning'; text: string; images?: Attachment[]; status?: string }
-export interface Conversation { id: string; connectionID: string; title: string; draft: string; images: Attachment[]; items: Item[]; cwd: string; mode: 'readOnly'|'project'; model: string; effort: string; status: string; updated: number; threadID?: string; sessionID?: string; hasSession?: boolean; archived?: boolean; readOnly?: boolean; handoffFrom?: string }
-export interface Settings { hotkey: string; gameMode: boolean; pin: boolean; autoPeek: boolean; bounds?: {x:number;y:number;width:number;height:number}; hostID: string }
+export interface Conversation { id: string; connectionID: string; title: string; draft: string; images: Attachment[]; items: Item[]; cwd: string; mode: 'readOnly'|'project'; model: string; effort: string; status: string; updated: number; threadID?: string; sessionID?: string; hasSession?: boolean; archived?: boolean; readOnly?: boolean; handoffFrom?: string; memoryEnabled?:boolean; memoryExcluded?:boolean; lastMemory?:MemoryContext }
+export interface Settings { crossConversationMemory?:boolean; sharedMemory?:string; hotkey: string; gameMode: boolean; pin: boolean; autoPeek: boolean; bounds?: {x:number;y:number;width:number;height:number}; hostID: string }
 export interface Snapshot { version: 1; connections: Connection[]; conversations: Conversation[]; settings: Settings; selected?: string; workspace: Workspace }
 export interface Approval { id: string; conversationID: string; method: string; title: string; detail: string; cwd: string; created: number; questions?: any[]; submitted?: boolean }
 export interface ViewState extends Snapshot { approvals: Approval[]; busy?: string; notice: string; loginBusy: boolean; hotkeyError: string; platform: string }

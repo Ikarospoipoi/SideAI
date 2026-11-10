@@ -127,7 +127,7 @@ extension SessionStore {
       catch { connectionNotice = error.localizedDescription }
     }
   }
-  func sendAccount(_ c: Conversation) {
+  func sendAccount(_ c: Conversation, memory: MemoryContext? = nil) {
     guard let runtime = c.accountRuntime, let path = RuntimeEnvironment.find(runtime.executable) else { banner = "请重新连接账号。"; return }
     preparingAPI = true
     let client = AccountClient(root: persistence.directory); accountClients[c.id] = client
@@ -144,7 +144,7 @@ extension SessionStore {
         if let model = c.modelID, !model.isEmpty {
           try await client.setModel(model, session: session)
         }
-        let prompt = try AccountClient.prompt(c)
+        let prompt = try AccountClient.prompt(c, memory: memory)
         try Task.checkCancellation()
         let id = UUID().uuidString; responseID = id
         var user = TimelineItem(kind: "userMessage", text: c.draft); user.attachments = c.images

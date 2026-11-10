@@ -24,6 +24,13 @@ export async function smokeTest(window:BrowserWindow,service:Service){
   service.changed();await new Promise(r=>setTimeout(r,80));
   if(!await evaluate("document.querySelector('#draftImages img')?.src.startsWith('data:image/png;base64,')"))throw Error('Image preview cache was lost after a state update');
   if(folder)fs.writeFileSync(path.join(folder,'chat.png'),(await window.webContents.capturePage()).toPNG());
+  const old=service.newConversation(id);old.title='SQL 记忆测试';old.items=[{id:'memory-fixture',role:'assistant',text:'SELECT b.TRACE_ID FROM orders b;',status:'completed'}];
+  service.select(c.id);c.draft='之前的 SQL TRACE_ID';service.changed();
+  await wait("document.getElementById('memory')?.textContent.includes('已开启')");
+  await evaluate("document.getElementById('memory').click()");
+  await wait("document.getElementById('dialogBody')?.innerText.includes('SELECT b.TRACE_ID')");
+  if(folder)fs.writeFileSync(path.join(folder,'memory.png'),(await window.webContents.capturePage()).toPNG());
+  await evaluate("document.getElementById('closeDialog').click()");
   const npm=installerScript();let version='';
   await service.runtime.runProcess(nodeExecutable(),[npm,'--version'],service.storage.root,service.runtime.env('codex',true),AbortSignal.timeout(30000),s=>version+=s).catch(e=>{throw Error(`${e.message}: ${version.slice(-4000)}`);});
   if(!/12\.2\.2/.test(version))throw Error('Bundled official-client installer failed: '+version.slice(0,100));

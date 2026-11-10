@@ -7,6 +7,7 @@ public struct AppSettings: Codable {
   public var workspaceMode: WorkspaceMode?
   public var lastConversationByWorkspace: [String: UUID]?
   public var sharedMemory: String?
+  public var crossConversationMemory: Bool?
   public var routingVersion: Int?
   public var chatgptHostID: String?
   public var removedAPIProfiles: [APIProfile]?

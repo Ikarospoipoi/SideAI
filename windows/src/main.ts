@@ -87,12 +87,15 @@ async function action(method:string,p:any={}){
     case 'imageBytes':{if(!Array.isArray(p.images)||p.images.length+service.conversation().images.length>8)throw Error('每条最多 8 张图片');const images=[];for(const image of p.images){if(!(image.bytes instanceof Uint8Array)||image.bytes.length>20*1024*1024)throw Error('图片过大');images.push(await attachment(Buffer.from(image.bytes),String(image.name??'图片')));}service.addImages(images);return;}
     case 'sync':return service.sync(p.id);
     case 'history':return service.history(p.id);
+    case 'memoryPreview':return service.memoryPreview(p.id);
     case 'handoff':service.handoff(p.source,p.target);return;
     case 'returnResult':service.returnResult(p.id);return;
     case 'import':{const result=await pick({title:'导入 ChatGPT 导出文件',properties:['openFile'],filters:[{name:'ChatGPT JSON',extensions:['json']}]});if(!result.canceled){if(fs.statSync(result.filePaths[0]).size>100*1024*1024)throw Error('导入文件不能超过 100 MB');service.importChatGPT(result.filePaths[0]);}return;}
     case 'settings':{
+      if(p.crossConversationMemory!==undefined||p.sharedMemory!==undefined)service.idle();
       if(typeof p.hotkey==='string'){registerHotkey(p.hotkey);service.state.settings.hotkey=p.hotkey;}
-      for(const key of ['gameMode','pin','autoPeek'] as const)if(typeof p[key]==='boolean')service.state.settings[key]=p[key];
+      for(const key of ['gameMode','pin','autoPeek','crossConversationMemory'] as const)if(typeof p[key]==='boolean')service.state.settings[key]=p[key];
+      if(typeof p.sharedMemory==='string')service.state.settings.sharedMemory=p.sharedMemory.slice(0,20000);
       service.changed();return;
     }
     case 'diagnostics':return {...stats,platform:process.platform,version:app.getVersion(),hotkey,windowsNative:!!native};

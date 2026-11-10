@@ -1,3 +1,4 @@
+import {MemoryContext,augment,originalMessage} from './memory';
 import {randomUUID} from 'node:crypto';
 import {RPC} from './rpc';
 import {Runtimes} from './runtime';
@@ -11,9 +12,9 @@ export async function codexModels(rpc:RPC):Promise<Model[]>{const models:Model[]
 export function timeline(raw:any):Item {
   const role=raw.type==='userMessage'?'user':raw.type==='agentMessage'?'assistant':raw.type==='reasoning'?'reasoning':'tool';
   const text=raw.text??(raw.type==='userMessage'?(raw.content??[]).filter((x:any)=>x.type==='text').map((x:any)=>x.text).join('\n'):raw.type==='commandExecution'?`${raw.command??''}\n${raw.aggregatedOutput??''}`:raw.type==='fileChange'?JSON.stringify(raw.changes,null,2):JSON.stringify(raw,null,2));
-  return {id:raw.id??randomUUID(),role,text:String(text).slice(-100000),status:raw.status==='inProgress'?'inProgress':'completed'};
+  return {id:raw.id??randomUUID(),role,text:(role==='user'?originalMessage(String(text)):String(text)).slice(-100000),status:raw.status==='inProgress'?'inProgress':'completed'};
 }
-export async function runCodex(runtime:Runtimes,connection:Connection,c:Conversation,hooks:AgentHooks,signal:AbortSignal){
+export async function runCodex(runtime:Runtimes,connection:Connection,c:Conversation,hooks:AgentHooks,signal:AbortSignal,memory?:MemoryContext){
   const rpc=await codexConnect(runtime,connection),generation=randomUUID();let turnID='',interrupted=false;
   const stop=()=>{interrupted=true;if(turnID)void rpc.request('turn/interrupt',{threadId:c.threadID,turnId:turnID}).catch(()=>rpc.stop());else rpc.stop();};signal.addEventListener('abort',stop,{once:true});
   let resolve!:(v:void)=>void,reject!:(e:Error)=>void;const completed=new Promise<void>((r,j)=>{resolve=r;reject=j;});completed.catch(()=>{});
@@ -52,10 +53,10 @@ export async function runCodex(runtime:Runtimes,connection:Connection,c:Conversa
     const r=await rpc.request(c.threadID?'thread/resume':'thread/start',params);c.threadID=r.thread.id;hooks.save();
     if(signal.aborted)throw Error('已停止');const user=c.items.filter(i=>i.role==='user').at(-1)!;
     const sandboxPolicy=c.mode==='project'?{type:'workspaceWrite',writableRoots:[c.cwd],networkAccess:false,excludeSlashTmp:true,excludeTmpdirEnvVar:true}:{type:'readOnly',networkAccess:false};
-    await rpc.request('turn/start',{threadId:c.threadID,input:[...(user.text?[{type:'text',text:user.text}]:[]),...(user.images??[]).map(a=>({type:'localImage',path:a.path}))],cwd:c.cwd,approvalPolicy:'on-request',approvalsReviewer:'user',sandboxPolicy,...(c.model?{model:c.model}:{}),...(c.effort?{effort:c.effort}:{})});await completed;
+    await rpc.request('turn/start',{threadId:c.threadID,input:[...(augment(user.text,memory)?[{type:'text',text:augment(user.text,memory)}]:[]),...(user.images??[]).map(a=>({type:'localImage',path:a.path}))],cwd:c.cwd,approvalPolicy:'on-request',approvalsReviewer:'user',sandboxPolicy,...(c.model?{model:c.model}:{}),...(c.effort?{effort:c.effort}:{})});await completed;
   }finally{signal.removeEventListener('abort',stop);rpc.stop();for(const a of pending.values())hooks.resolved(a.id);if(interrupted)c.status='interrupted';}
 }
-export async function runClaude(runtime:Runtimes,connection:Connection,c:Conversation,hooks:AgentHooks,signal:AbortSignal){
+export async function runClaude(runtime:Runtimes,connection:Connection,c:Conversation,hooks:AgentHooks,signal:AbortSignal,memory?:MemoryContext){
   const tools=c.mode==='project'?['Read','Glob','Grep','Edit','Write']:['Read','Glob','Grep'];c.sessionID??=randomUUID();hooks.save();
   const args=['-p','--input-format','stream-json','--output-format','stream-json','--verbose','--include-partial-messages','--safe-mode','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--tools',tools.join(','),'--permission-mode','manual','--disable-slash-commands','--restricted','--permission-prompt-tool','stdio',c.hasSession?'--resume':'--session-id',c.sessionID,...(c.model?['--model',c.model]:[]),...(c.effort?['--effort',c.effort]:[])];
   const rpc=runtime.start(connection,args,c.cwd),generation=randomUUID(),answer:Item={id:randomUUID(),role:'assistant',text:'',status:'inProgress'};c.items.push(answer);const requests=new Set<string>();
@@ -63,7 +64,7 @@ export async function runClaude(runtime:Runtimes,connection:Connection,c:Convers
   try{await new Promise<void>((resolve,reject)=>{
     rpc.on('disconnect',reject);rpc.on('event',m=>{try{
       if(m.type==='control_response'&&m.response?.request_id==='initialize'){
-        if(m.response.subtype!=='success')throw Error('Claude 初始化失败');const user=c.items.filter(i=>i.role==='user').at(-1)!;rpc.send({type:'user',message:{role:'user',content:[...(user.text?[{type:'text',text:user.text}]:[]),...(user.images??[]).map(a=>({type:'image',source:{type:'base64',media_type:'image/png',data:a.dataURL.split(',')[1]}}))]}});
+        if(m.response.subtype!=='success')throw Error('Claude 初始化失败');const user=c.items.filter(i=>i.role==='user').at(-1)!;rpc.send({type:'user',message:{role:'user',content:[...(augment(user.text,memory)?[{type:'text',text:augment(user.text,memory)}]:[]),...(user.images??[]).map(a=>({type:'image',source:{type:'base64',media_type:'image/png',data:a.dataURL.split(',')[1]}}))]}});
       }
       if(m.type==='system'&&m.subtype==='init'){if((m.tools??[]).some((t:string)=>!tools.includes(t))||(m.mcp_servers??[]).length)throw Error('官方客户端启用了未授权工具，已停止。');c.hasSession=true;hooks.save();}
       if(m.type==='control_request'){

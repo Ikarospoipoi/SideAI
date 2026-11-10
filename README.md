@@ -2,6 +2,8 @@
 
 **Windows 版本：** 新增 `windows/` 客户端，支持游戏内热键唤出、鼠标释放、返回原窗口，以及聊天 / Agent 连接。安装、功能对照与游戏兼容边界见 [Windows 使用指南](windows/README.md)。Windows 安装包由 [GitHub Actions](https://github.com/Ikarospoipoi/SideAI/actions/workflows/windows.yml) 构建。
 
+**跨会话记忆（v0.10.0）：** 聊天和 Agent 可自动查找本地旧对话及导入历史，输入框上方可查看来源、关闭或排除会话。详见 [记忆使用说明](docs/CROSS_CONVERSATION_MEMORY.md)。
+
 以下为 macOS 原生版本说明。
 
 一个留在 Mac 屏幕左侧的原生 AI 抽屉。SwiftUI + AppKit 界面，支持 Codex App Server / 本机 Claude Code Agent，以及 Responses / Chat Completions / Anthropic Messages API。正常使用没有模拟回复。
