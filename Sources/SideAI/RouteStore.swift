@@ -147,11 +147,10 @@ extension SessionStore {
       let cwd = c.claudeUsesTools ? URL(fileURLWithPath: c.cwd) : scratch.appendingPathComponent("Claude", isDirectory: true)
       try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
       let responseID = UUID().uuidString
-      var user = TimelineItem(kind: "userMessage", text: c.draft); user.attachments = c.images
       mutate(c.id) {
-        $0.claudeSessionID = c.claudeSessionID; $0.items.append(user)
+        $0.claudeSessionID = c.claudeSessionID
         $0.items.append(TimelineItem(id: responseID, kind: "agentMessage", text: "", status: "inProgress"))
-        $0.status = .running; $0.error = nil; $0.draft = ""; $0.attachments = []; $0.updatedAt = Date()
+        $0.status = .running; $0.error = nil; $0.updatedAt = Date()
         if $0.title == "新会话" { $0.title = c.draft.isEmpty ? "图片会话" : String(c.draft.prefix(24)) }
       }
       saveNow()

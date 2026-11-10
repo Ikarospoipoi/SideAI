@@ -37,6 +37,8 @@ import SwiftUI
   @Published var chatgptLoginStatus = "可新增官方授权，或使用下方已保存的连接。"
   @Published var chatgptSigningIn = false
   @Published var preparingMemory = false
+  var memoryPreparationTask: Task<Void, Never>?
+  var preparingConversationID: UUID?
   @Published var preparingAPI = false
   @Published var credentialAuthorizing = false
   @Published var settingsRequest = UUID()
@@ -267,7 +269,10 @@ import SwiftUI
       for turn in turns {
         for item in turn["items"].array {
           var t = EventState.timelineItem(item)
-          if let cached = c.items.first(where: { $0.id == t.id })?.attachments, !cached.isEmpty { t.attachments = cached }
+          if let cached = c.items.first(where: { $0.id == t.id }) {
+            if let images = cached.attachments, !images.isEmpty { t.attachments = images }
+            t.memory = cached.memory
+          }
           if let j = items.firstIndex(where: { $0.id == t.id }) {
             items[j] = t
           } else {
@@ -306,23 +311,41 @@ import SwiftUI
     }
   }
   func send() {
-    guard !isBusy, !syncing, let c = selected, c.canSendContent else { return }
-    preparingMemory = true
-    Task {
+    guard canSend, let c = selected else { return }
+    if c.workspace == .agent && c.mode == .project && c.cwd == scratch.path {
+      banner = "请先为项目 Agent 选择一个工作目录。"; return
+    }
+    if c.engine == .codex, let tid = c.threadID, externalThreads.contains(tid) {
+      banner = "此会话正在其他客户端运行，请稍后同步。"; return
+    }
+    var user = TimelineItem(id: "local:" + UUID().uuidString, kind: "userMessage", text: c.draft)
+    user.attachments = c.images
+    banner = nil
+    mutate(c.id) {
+      $0.items.append(user); $0.draft = ""; $0.attachments = []; $0.error = nil; $0.lastHTTPFailure = nil
+      $0.status = .running; $0.updatedAt = Date()
+      if $0.title == "新会话" { $0.title = c.draft.isEmpty ? "图片会话" : String(c.draft.prefix(24)) }
+    }
+    preparingMemory = true; preparingConversationID = c.id
+    saveNow()
+    memoryPreparationTask = Task {
       let memory = await memoryContext(for: c)
-      preparingMemory = false
-      guard selectedID == c.id, selected?.draft == c.draft, selected?.images == c.images else { banner = "输入已变更，请再次发送。"; return }
-      mutate(c.id) { $0.lastMemory = memory }
+      preparingMemory = false; preparingConversationID = nil; memoryPreparationTask = nil
+      guard !Task.isCancelled else { return }
+      mutate(c.id) {
+        $0.lastMemory = memory
+        if let i = $0.items.firstIndex(where: { $0.id == user.id }) { $0.items[i].memory = memory }
+      }
       dispatchSend(c, memory: memory)
+      if let error = banner { mutate(c.id) { $0.status = .failed; $0.error = error } }
     }
   }
   private func dispatchSend(_ c: Conversation, memory: MemoryContext) {
-    guard !isBusy, !syncing else { return }
     guard isRouteActive(route(for: c)) else { banner = "此连接未选中。请通过顶部连接菜单选择；聊天和 Agent 连接互不影响。"; return }
     if c.engine == .accountRuntime { sendAccount(c, memory: memory); return }
     if c.engine == .claude { sendClaude(c, memory: memory); return }
     if c.engine == .api { sendAPI(c, memory: memory); return }
-    guard c.engine == .codex, ready else { return }
+    guard c.engine == .codex, ready else { banner = "连接尚未就绪，请检查当前连接。"; return }
     if let tid = c.threadID, externalThreads.contains(tid) { banner = "此会话正在其他客户端运行，请稍后同步。"; return }
     if !c.images.isEmpty, codexModels.first(where: { $0.id == c.modelID })?.supportsImages == false {
       banner = "当前模型不支持图片，请切换模型。"; return
@@ -331,7 +354,6 @@ import SwiftUI
       banner = "请先为项目 Agent 选择一个工作目录。"
       return
     }
-    let text = c.draft
     loading.insert(c.id)
     mutate(c.id) {
       $0.error = nil
@@ -344,19 +366,6 @@ import SwiftUI
       }
       do {
         let tid = try await ensureThread(c.id)
-        mutate(c.id) { s in
-          if s.draft == c.draft { s.draft = "" }
-          let sentImages = Set(c.images.map(\.id))
-          s.attachments = s.images.filter { !sentImages.contains($0.id) }
-          s.status = .running
-          if s.title == "新会话" {
-            s.title = String((text.isEmpty ? "图片会话" : text).prefix(24)).replacingOccurrences(of: "\n", with: " ")
-          }
-          var item = TimelineItem(id: "local:" + UUID().uuidString, kind: "userMessage", text: text)
-          item.attachments = c.images
-          s.items.append(item)
-          s.updatedAt = Date()
-        }
         // Persist the thread ID before any potentially side-effecting turn is sent.
         saveNow()
         _ = try await client.request("turn/start", c.codexTurnParams(threadID: tid, memory: memory))
@@ -372,6 +381,11 @@ import SwiftUI
   }
   func interrupt(_ id: UUID? = nil) {
     guard let c = state.conversations.first(where: { $0.id == (id ?? selectedID) }) else { return }
+    if preparingConversationID == c.id {
+      memoryPreparationTask?.cancel()
+      mutate(c.id) { $0.status = .interrupted; $0.error = nil }
+      return
+    }
     if c.engine == .accountRuntime { accountTasks[c.id]?.cancel(); accountClients[c.id]?.stop(); return }
     if c.engine == .claude { claudeTasks[c.id]?.cancel(); claudeClients[c.id]?.cancel(); return }
     if c.engine == .api { apiTasks[c.id]?.cancel(); apiClients[c.id]?.cancel(); return }
@@ -478,6 +492,7 @@ import SwiftUI
   }
   func shutdown() {
     cancelAccountLogin()
+    memoryPreparationTask?.cancel()
     for task in accountTasks.values { task.cancel() }
     for task in accountModelTasks.values { task.cancel() }
     for client in accountClients.values { client.stop() }

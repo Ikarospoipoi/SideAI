@@ -1,3 +1,4 @@
+import {HTTPChatFailure,httpDiagnostic} from './http-diagnostic';
 import {MemoryContext,augment} from './memory';
 import {Connection,Conversation,endpoint} from './types';
 export type Fetch = typeof fetch;
@@ -22,13 +23,14 @@ export async function chat(fetcher:Fetch,connection:Connection,c:Conversation,ke
   const format=connection.format??'chatCompletions';const headers:Record<string,string>={'Content-Type':'application/json'};
   if(format==='anthropic'){headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';}else headers.Authorization=`Bearer ${key}`;
   const route=format==='responses'?'responses':format==='anthropic'?'messages':'chat/completions';
-  const response=await fetcher(`${endpoint(connection.endpoint!)}/${route}`,{method:'POST',headers,body:JSON.stringify(body(c,format,memory)),signal,redirect:'error'});
-  if(!response.ok)throw Error(`请求失败（HTTP ${response.status}）。请检查此连接的账号、模型与额度。`);
+  const url=`${endpoint(connection.endpoint!)}/${route}`;
+  const response=await fetcher(url,{method:'POST',headers,body:JSON.stringify(body(c,format,memory)),signal,redirect:'error'});
+  if(!response.ok){let raw='';const reader=response.body?.getReader();if(reader){const decoder=new TextDecoder();try{while(raw.length<16384){const part=await reader.read();if(part.done)break;raw+=decoder.decode(part.value.subarray(0,16384-raw.length));}}finally{await reader.cancel();}}let payload:any={};try{payload=JSON.parse(raw);}catch{}throw new HTTPChatFailure(httpDiagnostic(url,response.status,response.headers,payload));}
   if(!response.body)throw Error('服务器未返回内容');
   const sse=new SSE();let text='',done=false;
   for await(const chunk of response.body as any){for(const line of sse.push(chunk)){
     if(line==='[DONE]'){done=true;continue;}const m=JSON.parse(line);
-    if(m.error||['error','response.failed','response.incomplete'].includes(m.type))throw Error('服务未完整生成回复，请检查模型、额度与网络。');
+    if(m.error||['error','response.failed','response.incomplete'].includes(m.type))throw new HTTPChatFailure(httpDiagnostic(url,response.status,response.headers,m));
     if(m.type==='response.output_text.delta')text+=m.delta??'';
     if(m.type==='content_block_delta'&&m.delta?.type==='text_delta')text+=m.delta.text??'';
     if(m.choices?.[0]?.delta?.content)text+=m.choices[0].delta.content;

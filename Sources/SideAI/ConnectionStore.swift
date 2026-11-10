@@ -114,8 +114,8 @@ extension SessionStore {
         banner = nil
         let itemID = UUID().uuidString; responseID = itemID
         mutate(c.id) {
-          $0.items.append(user); $0.items.append(TimelineItem(id: itemID, kind: "agentMessage", text: "", status: "inProgress"))
-          $0.draft = ""; $0.attachments = []; $0.status = .running; $0.error = nil; $0.updatedAt = Date()
+          $0.items.append(TimelineItem(id: itemID, kind: "agentMessage", text: "", status: "inProgress"))
+          $0.status = .running; $0.error = nil; $0.updatedAt = Date()
           if $0.title == "新会话" { $0.title = c.draft.isEmpty ? "图片会话" : String(c.draft.prefix(24)) }
         }
         preparingAPI = false; saveNow()
@@ -128,6 +128,7 @@ extension SessionStore {
         apiConnectionStatus[profile.id] = "API 已连接 · 上次请求成功"
         onCompletion?()
       } catch {
+        if let failure = error as? HTTPChatFailure { mutate(c.id) { $0.lastHTTPFailure = failure.diagnostic } }
         let cancelled = Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
         let message = secret.isEmpty ? error.localizedDescription : error.localizedDescription.replacingOccurrences(of: secret, with: "[redacted]")
         if let responseID {
@@ -135,7 +136,7 @@ extension SessionStore {
             $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : message
             if let i = $0.items.firstIndex(where: { $0.id == responseID }) { $0.items[i].status = cancelled ? "interrupted" : "failed" }
           }
-        } else { banner = cancelled ? "请求已取消，草稿保留。" : message }
+        } else { banner = cancelled ? nil : message; mutate(c.id) { $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : message } }
       }
     }
   }

@@ -1,3 +1,4 @@
+import {HTTPChatFailure} from './http-diagnostic';
 import {MemoryClient} from './memory-client';
 import {MemoryContext} from './memory';
 import {EventEmitter} from 'node:events';
@@ -13,7 +14,8 @@ export class Service extends EventEmitter {
   busy?:string;notice='';hotkeyError='';login?:AbortController;run?:AbortController;
   approvals:Approval[]=[];private replies=new Map<string,(allow:boolean,answers:Record<string,string>)=>void>();private timer?:NodeJS.Timeout;
   runtime:Runtimes;private memoryClient=new MemoryClient();
-  async memoryPreview(id:string):Promise<MemoryContext>{const c=this.conversation(id);if(this.state.settings.crossConversationMemory===false||c.memoryEnabled===false)return {sources:[],notes:''};return this.memoryClient.query(c,this.state.conversations,this.state.settings.sharedMemory??'');}
+  async memoryPreview(id:string):Promise<MemoryContext>{return this.memoryFor(this.conversation(id));}
+  private async memoryFor(c:Conversation):Promise<MemoryContext>{if(this.state.settings.crossConversationMemory===false||c.memoryEnabled===false)return {sources:[],notes:''};return this.memoryClient.query(c,this.state.conversations,this.state.settings.sharedMemory??'');}
   constructor(public storage:Storage,private vault:Vault,private fetcher:Fetch,private open:(s:string)=>Promise<void>){super();this.runtime=new Runtimes(storage,s=>this.message(s),open,fetcher);}
   get state(){return this.storage.state;}
   view():ViewState{return {...this.state,approvals:this.approvals,busy:this.busy,notice:this.notice,loginBusy:!!this.login,hotkeyError:this.hotkeyError,platform:process.platform};}
@@ -91,13 +93,16 @@ export class Service extends EventEmitter {
   }
   async send(id:string){this.idle();const c=this.conversation(id),connection=this.connection(c.connectionID);if(c.readOnly)throw Error('此会话为只读档案，请创建续聊副本。');if(!c.draft.trim()&&!c.images.length)return;
     if(['api','chatgpt','openrouter'].includes(connection.engine)&&!c.model)throw Error('请先选择或填写模型。');
-    const draft=c.draft,imageIDs=c.images.map(i=>i.id).join(',');
-    this.busy=id;this.run=new AbortController();this.message('正在查找相关历史…');let memory:MemoryContext;
-    try{memory=await this.memoryPreview(id);if(this.run.signal.aborted)throw Error('已停止，草稿保留。');if(c.draft!==draft||c.images.map(i=>i.id).join(',')!==imageIDs)throw Error('输入已变更，请再次发送。');}catch(e){this.busy=undefined;this.run=undefined;this.changed();throw e;}c.lastMemory=memory;
-    const user={id:'local:'+randomUUID(),role:'user' as const,text:c.draft,images:c.images,status:'completed'};c.items.push(user);c.draft='';c.images=[];if(c.title==='新会话')c.title=user.text.slice(0,24)||'图片会话';c.status='running';c.updated=Date.now();this.busy=id;this.run=new AbortController();this.notice='';this.storage.save();this.changed();
+    const before={...c,items:[...c.items],images:[...c.images]};
+    const user:Conversation['items'][number]={id:'local:'+randomUUID(),role:'user',text:c.draft,images:c.images,status:'completed'};
+    c.items.push(user);c.draft='';c.images=[];if(c.title==='新会话')c.title=user.text.slice(0,24)||'图片会话';c.status='running';c.lastHTTPFailure=undefined;c.updated=Date.now();
+    this.busy=id;this.run=new AbortController();this.notice='';this.storage.save();this.changed();
     const signal=this.run.signal;
     const hooks:AgentHooks={changed:()=>this.changed(),save:()=>this.storage.save(),approval:(a,reply)=>{this.approvals.push(a);this.replies.set(a.id,reply);this.changed();this.emit('attention');},resolved:id=>{this.approvals=this.approvals.filter(a=>a.id!==id);if(id)this.replies.delete(id);this.changed();}};
     try{
+      const memory=await this.memoryFor(before);
+      if(signal.aborted)throw Error('已停止');
+      c.lastMemory=memory;user.memory=memory;this.changed();
       if(connection.engine==='codex')await runCodex(this.runtime,connection,c,hooks,signal,memory);
       else if(connection.engine==='claude')await runClaude(this.runtime,connection,c,hooks,signal,memory);
       else{
@@ -115,15 +120,15 @@ export class Service extends EventEmitter {
         }else{const key=await this.credential(connection);await chat(this.fetcher,connection,c,key,signal,t=>{answer.text=t;this.changed();},memory);}answer.status='completed';c.status='completed';}finally{if(answer.status==='inProgress')answer.status='interrupted';}
       }
       this.emit('completed');
-    }catch(e){c.status=signal.aborted?'interrupted':'failed';this.notice=signal.aborted?'已停止。':safeError(e);}finally{this.approvals=this.approvals.filter(a=>a.conversationID!==id);this.replies.clear();this.busy=undefined;this.run=undefined;this.storage.save();this.changed();}
+    }catch(e){if(e instanceof HTTPChatFailure)c.lastHTTPFailure=e.diagnostic;c.status=signal.aborted?'interrupted':'failed';this.notice=signal.aborted?'已停止。':safeError(e);}finally{this.approvals=this.approvals.filter(a=>a.conversationID!==id);this.replies.clear();this.busy=undefined;this.run=undefined;this.storage.save();this.changed();}
   }
   respond(id:string,allow:boolean,answers:Record<string,string>={}){const a=this.approvals.find(a=>a.id===id);if(!a||a.submitted||!this.replies.has(id))throw Error('此审批已失效');a.submitted=true;this.replies.get(id)!(allow,answers);this.changed();}
   async sync(id:string){this.idle();const connection=this.connection(id);if(connection.engine!=='codex')throw Error('该连接保存在本地；ChatGPT 网页历史可通过导出 JSON 导入。');const rpc=await codexConnect(this.runtime,connection);try{for(const archived of [false,true]){let cursor:string|undefined;const seen=new Set<string>();do{const r=await rpc.request('thread/list',{limit:100,archived,modelProviders:[],sourceKinds:['cli','vscode','exec','appServer','subAgent','subAgentReview','subAgentCompact','subAgentThreadSpawn','subAgentOther','unknown'],...(cursor?{cursor}:{})});for(const t of r.data??[]){let c=this.state.conversations.find(c=>c.connectionID===id&&c.threadID===t.id);if(!c){c=this.newConversation(id);c.threadID=t.id;c.title=t.name??t.preview?.slice(0,50)??'Codex 会话';c.cwd=t.cwd??c.cwd;c.archived=archived;}}cursor=r.nextCursor;if(cursor&&seen.has(cursor))throw Error('会话分页重复');if(cursor)seen.add(cursor);}while(cursor);}this.message('Codex 会话索引已同步。选择会话后可载入历史。');}finally{rpc.stop();}}
-  async history(id:string){const c=this.conversation(id),connection=this.connection(c.connectionID);if(connection.engine!=='codex'||!c.threadID||this.busy===id)return;const rpc=await codexConnect(this.runtime,connection);try{const r=await rpc.request('thread/read',{threadId:c.threadID,includeTurns:false});let turns:any[]=[];if(!turns.length){let cursor:string|undefined;const seen=new Set<string>();do{const page=await rpc.request('thread/turns/list',{threadId:c.threadID,limit:100,itemsView:'full',sortDirection:'asc',...(cursor?{cursor}:{})});turns.push(...(page.data??[]));cursor=page.nextCursor;if(cursor&&seen.has(cursor))throw Error('历史分页重复');if(cursor)seen.add(cursor);}while(cursor);}c.updated=Date.now();c.items=turns.flatMap((t:any)=>(t.items??[]).map(timeline));this.changed();}finally{rpc.stop();}}
+  async history(id:string){const c=this.conversation(id),connection=this.connection(c.connectionID);if(connection.engine!=='codex'||!c.threadID||this.busy===id)return;const rpc=await codexConnect(this.runtime,connection);try{const r=await rpc.request('thread/read',{threadId:c.threadID,includeTurns:false});let turns:any[]=[];if(!turns.length){let cursor:string|undefined;const seen=new Set<string>();do{const page=await rpc.request('thread/turns/list',{threadId:c.threadID,limit:100,itemsView:'full',sortDirection:'asc',...(cursor?{cursor}:{})});turns.push(...(page.data??[]));cursor=page.nextCursor;if(cursor&&seen.has(cursor))throw Error('历史分页重复');if(cursor)seen.add(cursor);}while(cursor);}c.updated=Date.now();const cached=new Map(c.items.map(i=>[i.id,i.memory]));c.items=turns.flatMap((t:any)=>(t.items??[]).map((raw:any)=>{const item=timeline(raw);item.memory=cached.get(item.id);return item;}));this.changed();}finally{rpc.stop();}}
   handoff(sourceID:string,targetID:string){const source=this.conversation(sourceID),target=this.newConversation(targetID);target.handoffFrom=sourceID;target.draft='请继续处理以下上下文：\n\n'+source.items.filter(i=>['user','assistant'].includes(i.role)).map(i=>`${i.role}: ${i.text}`).join('\n\n')+'\n'+source.draft;target.images=[...source.images].slice(0,8);this.message('上下文已复制到新草稿，点击发送后才会提交。');}
   returnResult(id:string){const c=this.conversation(id);if(!c.handoffFrom)throw Error('此任务没有来源会话');const source=this.conversation(c.handoffFrom);source.draft+='\n'+(c.items.filter(i=>i.role==='assistant').at(-1)?.text??'');this.select(source.id);}
   importChatGPT(file:string){this.idle();const input=JSON.parse(fs.readFileSync(file,'utf8'));if(!Array.isArray(input))throw Error('请选择官方导出的 conversations.json');let count=0;for(const row of input){const id='chatgpt-import:'+row.id;if(this.state.conversations.some(c=>c.id===id))continue;let node=row.current_node;const items:Conversation['items']=[],seen=new Set<string>();while(node&&row.mapping?.[node]&&!seen.has(node)){seen.add(node);const entry=row.mapping[node],m=entry.message;if(['user','assistant'].includes(m?.author?.role)){const text=(m.content?.parts??[]).filter((x:any)=>typeof x==='string').join('\n');if(text)items.unshift({id:m.id??node,role:m.author.role,text,status:'completed'});}node=entry.parent;}this.state.conversations.push({id,connectionID:'import',title:row.title??'ChatGPT 导入',draft:'',images:[],items,cwd:this.storage.directory('Scratch'),mode:'readOnly',model:'',effort:'',status:'completed',updated:(row.update_time??0)*1000,readOnly:true});count++;}this.message(`已导入 ${count} 个只读会话。`);}
-  stop(){this.run?.abort();}
+  stop(){this.run?.abort();this.memoryClient.close();}
   cancelLogin(){this.login?.abort();}
   shutdown(){this.memoryClient.close();this.cancelLogin();this.stop();this.storage.save();}
 }

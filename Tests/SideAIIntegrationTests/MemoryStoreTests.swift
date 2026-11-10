@@ -18,4 +18,23 @@ final class MemoryStoreTests: XCTestCase {
     store.settings.crossConversationMemory = true; store.settings.sharedMemory = ""; store.state.conversations[0].memoryExcluded = true
     result = await store.memoryContext(for: current); XCTAssertTrue(result.isEmpty)
   }
+  @MainActor func testSendImmediatelyShowsMessageAndStopDuringMemoryDoesNotDispatch() async throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let store = SessionStore(directory: dir); defer { store.shutdown() }
+    var p = ProviderKind.deepseek.preset(); p.defaultModel = "test"
+    store.settings.apiProfiles = [p]; store.newConversation(route: .api(p))
+    let id = try XCTUnwrap(store.selectedID)
+    store.mutate(id) { $0.draft = "之前的 SQL" }
+    store.send()
+    XCTAssertEqual(store.selected?.items.last?.text, "之前的 SQL")
+    XCTAssertEqual(store.selected?.draft, ""); XCTAssertEqual(store.selected?.status, .running)
+    XCTAssertTrue(store.preparingMemory)
+    store.mutate(id) { $0.draft = "下一条草稿" }
+    store.interrupt(); await store.memoryPreparationTask?.value
+    XCTAssertEqual(store.selected?.status, .interrupted); XCTAssertEqual(store.selected?.draft, "下一条草稿")
+    XCTAssertEqual(store.selected?.items.count, 1); XCTAssertTrue(store.apiTasks.isEmpty); XCTAssertNil(store.banner)
+    XCTAssertFalse(store.isBusy)
+  }
+
 }

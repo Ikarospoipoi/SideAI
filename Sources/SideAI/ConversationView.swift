@@ -106,7 +106,7 @@ struct ConversationView: View {
           ).padding(10)
         }.buttonStyle(.plain).foregroundStyle(.orange)
       }
-      if let c = store.selected { TimelineView(conversation: c).id(c.id) } else { Spacer() }
+      if let c = store.selected { TimelineView(conversation: c, openSource: { id in if let uuid = UUID(uuidString: id) { store.select(uuid) } }).id(c.id) } else { Spacer() }
       composer
       }
     }
@@ -284,7 +284,7 @@ struct ConversationView: View {
             } label: {
               Image(systemName: "stop.fill").font(.system(size: 11, weight: .semibold)).frame(
                 width: 28, height: 28)
-            }.buttonStyle(.bordered).help("停止当前任务").disabled(store.selected?.engine == .codex && store.selected?.turnID == nil)
+            }.buttonStyle(.bordered).help("停止当前任务").disabled(store.selected?.engine == .codex && store.selected?.turnID == nil && !store.preparingMemory)
           } else {
             Button {
               store.send()
@@ -320,6 +320,7 @@ struct ConversationView: View {
 struct TimelineView: View {
   @Environment(\.providerAccent) private var accent
   var conversation: Conversation
+  var openSource: (String) -> Void = { _ in }
   @State private var followLatest = true
   @State private var visibleCount = 100
   var body: some View {
@@ -332,7 +333,7 @@ struct TimelineView: View {
                 .system(size: 29, weight: .light)
               ).foregroundStyle(accent).padding(.bottom, 8)
               Text(conversation.engine == .claude ? "和 Claude，接着聊。" : conversation.engine == .api ? "开始新的对话。" : "随时，接着想。").font(.system(size: 26, weight: .medium))
-              Text(conversation.engine == .codex ? "聊一个想法，理清一个问题，\n或选好项目，把事情交给 Codex。" : "当前连接有独立的历史、草稿与模型。\n其他连接的对话不会自动带入。").font(.system(size: 14)).foregroundStyle(
+              Text(conversation.engine == .codex ? "聊一个想法，理清一个问题，\n或选好项目，把事情交给 Codex。" : "直接聊就好。开启记忆后，\n会自动参考相关的历史会话。").font(.system(size: 14)).foregroundStyle(
                 .secondary
               ).lineSpacing(6)
               Label("收起侧栏，任务仍会继续", systemImage: "arrow.left.to.line").font(.caption)
@@ -342,16 +343,23 @@ struct TimelineView: View {
           if conversation.items.count > visibleCount {
             Button("载入更早的消息") { followLatest = false; visibleCount += 100 }
           }
-          ForEach(conversation.items.suffix(visibleCount)) { item in MessageView(item: item) }
+          ForEach(conversation.items.suffix(visibleCount)) { item in
+            MessageView(item: item)
+            if let memory = item.memory { MemorySourcesView(memory: memory, openSource: openSource) }
+          }
           if let error = conversation.error {
             Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(
               .orange
             ).textSelection(.enabled)
           }
+          if let diagnostic = conversation.lastHTTPFailure {
+            DisclosureGroup("请求诊断") { Text(diagnostic.summary).font(.caption).textSelection(.enabled) }
+              .font(.caption).foregroundStyle(.secondary)
+          }
           if conversation.status == .running {
             HStack(spacing: 8) {
               ProgressView().controlSize(.small)
-              Text("AI 正在处理…").font(.caption).foregroundStyle(.secondary)
+              Text("正在回复…").font(.caption).foregroundStyle(.secondary)
             }
           }
           Color.clear.frame(height: 1).id("bottom")
@@ -388,7 +396,7 @@ struct MessageView: View {
           if !item.text.isEmpty { Text(item.text).textSelection(.enabled).font(.system(size: 14)) }
         }.padding(13).background(accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 13))
       }
-    } else if item.kind == "agentMessage" {
+    } else if item.kind == "agentMessage" && !item.text.isEmpty {
       VStack(alignment: .leading, spacing: 10) {
         Text("AI").font(.system(size: 9, weight: .semibold)).tracking(1.6).foregroundStyle(
           .secondary)
@@ -399,7 +407,7 @@ struct MessageView: View {
           Image(systemName: "doc.on.doc").font(.system(size: 10)).foregroundStyle(.tertiary)
         }.buttonStyle(.plain).help("复制回复")
       }
-    } else if item.kind != "reasoning" || !item.detail.isEmpty {
+    } else if item.kind != "agentMessage" && (item.kind != "reasoning" || !item.detail.isEmpty) {
       DisclosureGroup {
         ScrollView(.horizontal) {
           Text(item.detail.isEmpty ? item.text : item.detail).font(

@@ -147,10 +147,9 @@ extension SessionStore {
         let prompt = try AccountClient.prompt(c, memory: memory)
         try Task.checkCancellation()
         let id = UUID().uuidString; responseID = id
-        var user = TimelineItem(kind: "userMessage", text: c.draft); user.attachments = c.images
         mutate(c.id) {
-          $0.items += [user, TimelineItem(id: id, kind: "agentMessage", text: "", status: "inProgress")]
-          $0.draft = ""; $0.attachments = []; $0.status = .running; $0.error = nil
+          $0.items += [TimelineItem(id: id, kind: "agentMessage", text: "", status: "inProgress")]
+          $0.status = .running; $0.error = nil
           if $0.title == "新会话" { $0.title = c.draft.isEmpty ? "图片会话" : String(c.draft.prefix(24)) }
         }
         preparingAPI = false
@@ -167,7 +166,7 @@ extension SessionStore {
             $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : error.localizedDescription
             if let i = $0.items.firstIndex(where: { $0.id == id }) { $0.items[i].status = cancelled ? "interrupted" : "failed" }
           }
-        } else { banner = cancelled ? "已取消，输入内容已保留。" : error.localizedDescription }
+        } else { mutate(c.id) { $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : error.localizedDescription } }
       }
     }
   }

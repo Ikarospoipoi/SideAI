@@ -28,9 +28,25 @@ export async function smokeTest(window:BrowserWindow,service:Service){
   service.select(c.id);c.draft='之前的 SQL TRACE_ID';service.changed();
   await wait("document.getElementById('memory')?.textContent.includes('已开启')");
   await evaluate("document.getElementById('memory').click()");
-  await wait("document.getElementById('dialogBody')?.innerText.includes('SELECT b.TRACE_ID')");
-  if(folder)fs.writeFileSync(path.join(folder,'memory.png'),(await window.webContents.capturePage()).toPNG());
+  await wait("document.getElementById('dialogBody')?.innerText.includes('直接发送消息即可')");
+  if(await evaluate("document.getElementById('dialogBody')?.innerText.includes('按当前输入')"))throw Error('Manual memory search still visible');
   await evaluate("document.getElementById('closeDialog').click()");
+  // Exercise the real send/worker/render lifecycle; only the network and credential are fixtures.
+  let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve);
+  (service as any).credential=async()=> 'fixture-no-secret';
+  (service as any).fetcher=async()=>{await gate;return new Response('data: {"type":"response.output_text.delta","delta":"可以继续之前的 SQL。"}\n\ndata: {"type":"response.completed"}\n\n');};
+  const sending=service.send(c.id);
+  await wait("document.querySelector('.replyActivity')?.textContent.includes('正在回复') && document.querySelector('.memorySources summary')?.textContent.includes('已参考')");
+  if(await evaluate("document.getElementById('notice').textContent.includes('查找')"))throw Error('Memory still appears as a separate blocking step');
+  await evaluate("document.querySelector('.memorySources summary').click()");
+  await wait("document.querySelector('.memorySources')?.open && document.querySelector('.memorySources')?.innerText.includes('SELECT b.TRACE_ID')");
+  if(folder)fs.writeFileSync(path.join(folder,'memory.png'),(await window.webContents.capturePage()).toPNG());
+  await evaluate("document.getElementById('composer').value='下一条草稿';document.getElementById('composer').dispatchEvent(new Event('input',{bubbles:true}))");
+  release();await sending;
+  await wait("!document.querySelector('.replyActivity') && document.getElementById('timeline').innerText.includes('可以继续之前的 SQL')");
+  if(!await evaluate("document.querySelector('.memorySources')?.open"))throw Error('Streaming collapsed the source disclosure');
+  if(c.draft!=='下一条草稿')throw Error('Send erased the next draft');
+  if(folder)fs.writeFileSync(path.join(folder,'reply.png'),(await window.webContents.capturePage()).toPNG());
   const npm=installerScript();let version='';
   await service.runtime.runProcess(nodeExecutable(),[npm,'--version'],service.storage.root,service.runtime.env('codex',true),AbortSignal.timeout(30000),s=>version+=s).catch(e=>{throw Error(`${e.message}: ${version.slice(-4000)}`);});
   if(!/12\.2\.2/.test(version))throw Error('Bundled official-client installer failed: '+version.slice(0,100));

@@ -42,6 +42,20 @@ final class TransportTests: XCTestCase {
     }
   }
   }
+  func testQuotaStreamDiagnosticUsesRealHTTPStatusAndRedactsCredential() async throws {
+    let client = HTTPChatClient(); defer { client.cancel() }
+    do {
+      _ = try await client.stream(profile: profile("quota"), key: "fixture-key", body: .object(["model": .string("fixture-vision")])) { _ in }
+      XCTFail("Expected stream error")
+    } catch let error as HTTPChatFailure {
+      XCTAssertEqual(error.diagnostic.status, 200)
+      XCTAssertEqual(error.diagnostic.event, "error")
+      XCTAssertEqual(error.diagnostic.errorType, "invalid_request_error")
+      XCTAssertEqual(error.diagnostic.errorCode, "subscription_sharing_usage_limit_exceeded")
+      XCTAssertTrue(error.diagnostic.resetFields.isEmpty)
+      XCTAssertFalse(error.localizedDescription.contains("fixture-key"))
+    }
+  }
   func testCancelHTTPStream() async throws {
     let client = HTTPChatClient(), p = profile("slow")
     let task = Task { try await client.stream(profile: p, key: "fixture-key", body: .object(["model": .string("fixture-vision")])) { _ in } }

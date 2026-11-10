@@ -44,6 +44,7 @@ public struct TimelineItem: Codable, Identifiable, Equatable {
   public var detail: String
   public var status: String
   public var attachments: [ImageAttachment]?
+  public var memory: MemoryContext?
   public init(
     id: String = UUID().uuidString, kind: String, text: String, detail: String = "",
     status: String = "completed"
@@ -67,6 +68,7 @@ public struct Conversation: Codable, Identifiable {
   public var items = [TimelineItem]()
   public var status: SessionStatus = .idle
   public var error: String?
+  public var lastHTTPFailure: HTTPFailureDiagnostic?
   public var updatedAt = Date()
   // Optional additions keep v0.1 snapshots readable without dropping existing drafts.
   public var backend: BackendKind?
@@ -93,6 +95,7 @@ public struct Conversation: Codable, Identifiable {
     if let i = items.firstIndex(where: { $0.id == item.id }) {
       var merged = item
       if merged.attachments == nil || merged.attachments?.map(\.path) == items[i].attachments?.map(\.path) { merged.attachments = items[i].attachments }
+      if merged.memory == nil { merged.memory = items[i].memory }
       items[i] = merged
     } else {
       items.append(item)
@@ -182,6 +185,7 @@ public struct EventState {
         })
       {
         item.attachments = conversations[i].items[local].attachments
+        item.memory = conversations[i].items[local].memory
         conversations[i].items.remove(at: local)
       }
       if method == "item/completed" || !conversations[i].items.contains(where: { $0.id == item.id })

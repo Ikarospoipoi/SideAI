@@ -6,7 +6,7 @@ Windows 10 / 11 的 AI 侧栏客户端。Windows 11 x64 是本次主要目标。
 
 在仓库的 **Actions → Windows build and tests → 最近一次成功运行 → Artifacts → SideAI-Windows-x64** 下载构建产物。
 
-- `SideAI-0.10.0-Windows-x64.exe`：安装向导，不需要以管理员身份安装。
+- `SideAI-0.10.1-Windows-x64.exe`：安装向导，不需要以管理员身份安装。
 - 同名 `.zip`：解压后运行 `SideAI.exe`，无需安装。
 - 本项目尚未配置 Windows 代码签名证书，构建物不是已签名商业安装包。
 

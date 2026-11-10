@@ -14,7 +14,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(401); self.end_headers(); self.wfile.write(b'{"error":{"message":"invalid fixture-key"}}'); return
         self.send_response(200); self.send_header('Content-Type', 'text/event-stream'); self.end_headers()
         if '/slow/' in self.path: time.sleep(3)
-        if body.get('model') != 'fixture-vision':
+        if '/quota/' in self.path:
+            events = [{'type': 'error', 'error': {'type': 'invalid_request_error', 'code': 'subscription_sharing_usage_limit_exceeded', 'message': 'quota fixture-key'}}]
+        elif body.get('model') != 'fixture-vision':
             events = [{'error': {'message': 'model was not routed'}}]
         elif self.path.endswith('/responses'):
             events = [{'type': 'response.output_text.delta', 'delta': '你好🌿'}, {'type': 'response.completed', 'response': {'output': [{'content': [{'text': '你好🌿'}]}]}}]

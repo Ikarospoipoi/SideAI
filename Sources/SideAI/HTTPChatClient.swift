@@ -81,7 +81,7 @@ final class HTTPChatClient: NSObject, URLSessionTaskDelegate, @unchecked Sendabl
       let event = try JSONDecoder().decode(JSON.self, from: data)
       if event["error"] != .null || ["error", "response.failed"].contains(event["type"].text) {
         let reason = event["error"]["message"].string ?? event["response"]["error"]["message"].string ?? event["message"].string ?? "API 生成失败"
-        throw ProtocolError.message(reason.replacingOccurrences(of: key, with: "[redacted]"))
+        throw HTTPChatFailure(diagnostic: diagnostic(http, payload: event), message: reason.replacingOccurrences(of: key, with: "[redacted]"))
       }
       if profile.format == .responses {
         switch event["type"].text {
@@ -119,12 +119,21 @@ final class HTTPChatClient: NSObject, URLSessionTaskDelegate, @unchecked Sendabl
     guard !text.isEmpty else { throw ProtocolError.message("API 已结束但没有返回可显示的文本") }
     return text
   }
+  private func diagnostic(_ response: HTTPURLResponse, payload: JSON) -> HTTPFailureDiagnostic {
+    let headers = response.allHeaderFields.reduce(into: [String: String]()) { result, pair in
+      if let name = pair.key as? String, let value = pair.value as? String { result[name] = value }
+    }
+    return HTTPFailureDiagnostic(url: response.url ?? URL(string: "https://unknown.invalid")!, status: response.statusCode, headers: headers, payload: payload)
+  }
   private func validate(_ response: URLResponse, data: Data, key: String) throws {
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
       let json = try? JSONDecoder().decode(JSON.self, from: data)
       let message = json?["error"]["message"].string ?? "请检查 API 地址、密钥、额度及服务是否支持该协议"
       let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-      throw ProtocolError.message("HTTP \(code)：" + message.replacingOccurrences(of: key, with: "[redacted]"))
+      if let http = response as? HTTPURLResponse {
+        throw HTTPChatFailure(diagnostic: diagnostic(http, payload: json ?? .null), message: "HTTP \(code)：" + message.replacingOccurrences(of: key, with: "[redacted]"))
+      }
+      throw ProtocolError.message("未收到 HTTP 响应")
     }
   }
 }
