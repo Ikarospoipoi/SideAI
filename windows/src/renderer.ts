@@ -26,6 +26,7 @@ function render(s:any){for(const c of s.conversations){for(const a of [...c.imag
   document.querySelectorAll('[data-mode]').forEach(e=>e.classList.toggle('selected',(e as HTMLElement).dataset.mode===s.workspace));
   const homeKey=JSON.stringify([s.workspace,s.connections]);if(modeKey!==homeKey){modeKey=homeKey;const grid=$('connections');grid.replaceChildren();for(const p of s.connections.filter((x:any)=>x.workspace===s.workspace)){const b=button('',()=>fire('selectConnection',{id:p.id}),'card');const title=el('b',p.name);title.style.color=catalog?.[p.provider]?.color??'#ddd';b.append(title,el('small',p.engine==='api'?'API · 已配置':p.workspace==='agent'?'官方 Agent · 已连接':'官方账号 · 已连接'));grid.append(b);}if(!grid.children.length)grid.append(el('p','还没有连接，先添加一个 AI。','muted'));}
   $('memory').textContent=s.settings.crossConversationMemory!==false&&c?.memoryEnabled!==false?'记忆已开启':'记忆已关闭';
+  $('workbench').hidden=!enhancedUI(conn,c);
   if(!c)return;
   if(changed||document.activeElement!==composer)composer.value=c.draft;
   if(changed){timelineKey='';approvalKey='';imageKey='';}
@@ -33,7 +34,7 @@ function render(s:any){for(const c of s.conversations){for(const a of [...c.imag
   const modelOptions=$('modelOptions');modelOptions.replaceChildren(...(conn?.models??[]).map((m:any)=>{const o=el('option',m.name);o.value=m.id;return o;}));
   const modelInfo=conn?.models.find((m:any)=>m.id===c.model);const efforts=modelInfo?.efforts??['low','medium','high','xhigh','max'];const values=JSON.stringify(efforts);if(effort.dataset.options!==values){effort.dataset.options=values;effort.replaceChildren(...[['','默认强度'],...efforts.map((e:string)=>[e,e])].map(([v,t])=>{const o=el('option',t);o.value=v;return o;}));}effort.value=c.effort;
   const busy=!!s.busy;model.disabled=busy;effort.disabled=busy;($('send') as HTMLButtonElement).disabled=!!s.loginBusy||(!s.busy&&(!conn||c.readOnly));$('send').textContent=s.busy===c.id?'■':'↑';
-  const context=$('context');context.replaceChildren();if(conn?.workspace==='agent'){const mode=select([['readOnly','只读 Agent'],['project','项目 Agent']],c.mode);mode.disabled=busy;mode.onchange=()=>patch({mode:mode.value});const project=button('▱ '+(c.cwd.split(/[\\/]/).pop()||'选择项目'),()=>fire('project'));project.title=c.cwd;context.append(mode,project);}else context.append(el('span',c.readOnly?'只读档案':'轻量聊天 · 不执行本机工具'));
+  const context=$('context');context.replaceChildren();if(conn?.workspace==='agent'){const project=button('▱ '+(c.cwd.split(/[\\/]/).pop()||'选择项目'),()=>fire('project'));project.title=c.cwd;context.append(el('span','Agent'),project);}else context.append(el('span',c.readOnly?'只读档案':'轻量聊天 · 不执行本机工具'));
   if(conn&&conn.workspace==='chat')context.append(button('交给 Agent…',()=>chooseHandoff(c.id,'agent')));if(c.handoffFrom)context.append(button('带回结果',()=>fire('returnResult',{id:c.id})));
   const key=JSON.stringify([c.items,c.status,c.lastHTTPFailure]);if(key!==timelineKey){timelineKey=key;const page=$('chatPage'),nearBottom=page.scrollHeight-page.scrollTop-page.clientHeight<90;const timeline=$('timeline');timeline.replaceChildren();const shown=c.items.slice(-150);if(c.items.length>150)timeline.append(button('查看完整历史',()=>showFullHistory(c)));
     for(const item of shown){if(item.role==='assistant'&&!item.text)continue;const block=el('article',undefined,'message '+item.role);block.append(el('div',item.role==='user'?'你':item.role==='assistant'?conn?.name??'AI':item.role==='reasoning'?'思考':'操作与进度','label'));appendMarkdown(block,item.text);for(const image of item.images??[]){const img=el('img');img.src=image.dataURL;img.alt=image.name;block.append(img);}if(item.status==='interrupted')block.append(el('small','回复未完整结束'));timeline.append(block);if(item.memory&&(item.memory.sources.length||item.memory.notes))timeline.append(memorySources(item.memory,item.id));}if(c.status==='running'){const activity=el('div','正在回复…','replyActivity');activity.setAttribute('role','status');timeline.append(activity);}if(c.lastHTTPFailure){const diagnostic=el('details',undefined,'memorySources');diagnostic.append(el('summary','请求诊断'),el('pre',JSON.stringify(c.lastHTTPFailure,null,2)));timeline.append(diagnostic);}if(nearBottom||changed)requestAnimationFrame(()=>page.scrollTop=page.scrollHeight);
@@ -77,3 +78,23 @@ $('model').onchange=()=>patch({model:($('model') as HTMLInputElement).value,effo
 document.querySelectorAll('[data-mode]').forEach(e=>(e as HTMLElement).onclick=()=>fire('workspace',{value:(e as HTMLElement).dataset.mode}));
 bridge.onState(render);bridge.onSettings(settings);bridge.onFocus(()=>{requestAnimationFrame(()=>{if(modalDialog.open){(modalDialog.querySelector('input,button') as HTMLElement)?.focus();}else if(current()){composer.focus();composer.setSelectionRange(composer.value.length,composer.value.length);fire('focusAck');}});});
 void (async()=>{catalog=await call('catalog');render(await call('state'));})();
+function enhancedUI(conn:any,c:any){return !!conn&&conn.engine!=='claude'&&conn.provider!=='anthropic'&&conn.format!=='anthropic'&&!/claude/i.test(c?.model??conn.model??'');}
+const workbenchButton=button('工作台',showWorkbench);workbenchButton.id='workbench';workbenchButton.hidden=true;$('memory').after(workbenchButton);
+function showWorkbench(){
+  const c=current(),conn=connection();if(!c||!enhancedUI(conn,c))return;
+  const b=dialog('工作台');b.append(el('h3','全文搜索'));
+  const query=input(),results=el('div');query.placeholder='搜索标题和消息正文';let searchVersion=0;
+  query.oninput=async()=>{const version=++searchVersion;try{const hits=await call('searchText',{query:query.value});if(version!==searchVersion)return;results.replaceChildren();for(const hit of hits)results.append(button(hit.title+' · '+hit.excerpt,()=>{fire('select',{id:hit.conversationID});closeDialog();const source=state.conversations.find((x:any)=>x.id===hit.conversationID);if(source)showFullHistory(source);}));}catch{}};
+  b.append(query,results,el('h3','记忆范围与上下文'));
+  const scope=select([['project','当前项目'],['all','全部历史'],['selected','指定会话']],c.historyScope??'project');
+  const budget=select([4000,8000,16000,32000,64000].map(v=>[String(v),String(v)+' tokens（估算）']),String(c.contextBudget??16000));
+  const summary=el('textarea');summary.value=c.contextSummary??'';summary.rows=3;
+  b.append(label('参考范围',scope),el('small',c.cwd),button('选择项目目录',()=>fire('project')),label('历史输入预算',budget),label('已核对的固定摘要',summary));
+  const sources=el('div');const sourceIDs=new Set<string>(c.memorySourceIDs??[]);
+  for(const source of state.conversations.filter((x:any)=>x.id!==c.id&&!x.memoryExcluded)){const check=input('','checkbox');check.checked=sourceIDs.has(source.id);check.onchange=()=>{if(check.checked)sourceIDs.add(source.id);else sourceIDs.delete(source.id);};sources.append(label(source.title,check));}
+  sources.hidden=scope.value!=='selected';scope.onchange=()=>{sources.hidden=scope.value!=='selected';};b.append(sources,button('保存范围与预算',async()=>{await call('patchProductivity',{id:c.id,patch:{historyScope:scope.value,memorySourceIDs:[...sourceIDs],contextBudget:Number(budget.value),contextSummary:summary.value}});closeDialog();}),el('p','Responses 可按需搜索和读取历史；旧记录完整保留，预算仅约束本次上下文。','hint'));
+  b.append(el('h3','快捷文本与文件'));const text=el('textarea');text.rows=5;
+  const action=select([['请翻译为中文，保留原意。','翻译'],['请解释以下内容。','解释'],['请润色以下文字，不添加事实。','润色'],['请分析以下报错并给出排查步骤。','分析报错']],'请翻译为中文，保留原意。');
+  b.append(row(button('读取剪贴板',async()=>{text.value=await call('clipboardText');}),button('读取文本文件',async()=>{text.value=await call('readTextFile');})),action,text,button('加入草稿（不发送）',async()=>{await call('patch',{id:c.id,patch:{draft:c.draft+(c.draft?'\n\n':'')+action.value+'\n\n以下是待处理文本：\n'+text.value}});closeDialog();}));
+  b.append(el('h3','会话'),row(button('创建独立分支',async()=>{await call('branchConversation',{id:c.id});closeDialog();}),button('导出 Markdown',()=>fire('exportText',{id:c.id}))),el('p','Agent 分支只复制可见背景，不回滚文件，不继承执行会话。手机遥控目前由 Mac 提供；Windows 不作为遥控主机。','hint'));
+}

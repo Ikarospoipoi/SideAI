@@ -10,11 +10,11 @@ public struct ClaudeApproval: Identifiable {
 public enum ClaudePermissions {
   public static func tools(for conversation: Conversation) -> [String] {
     guard conversation.claudeUsesTools else { return [] }
-    return conversation.mode == .readOnly ? ["Read", "Glob", "Grep"] : ["Read", "Glob", "Grep", "Edit", "Write"]
+    return ["default"] // Official CLI built-ins; native permission rules decide which calls prompt.
   }
   public static func approval(event: JSON, conversation: Conversation) -> ClaudeApproval? {
     guard event["type"].text == "control_request", event["request"]["subtype"].text == "can_use_tool",
-          let id = event["request_id"].string, tools(for: conversation).contains(event["request"]["tool_name"].text) else { return nil }
+          let id = event["request_id"].string, conversation.claudeUsesTools, !event["request"]["tool_name"].text.isEmpty else { return nil }
     return ClaudeApproval(id: id, conversationID: conversation.id, tool: event["request"]["tool_name"].text,
                           input: event["request"]["input"], cwd: conversation.cwd)
   }

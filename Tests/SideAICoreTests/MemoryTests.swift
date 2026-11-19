@@ -48,7 +48,7 @@ final class MemoryTests: XCTestCase {
       XCTAssertFalse(try APIRequestBuilder.body(conversation: c, format: format, model: "test").pretty.contains("SELECT b.TRACE_ID"))
     }
     let codex = c.codexTurnParams(threadID: "thread", memory: memory)
-    XCTAssertEqual(codex["approvalPolicy"].text, "on-request"); XCTAssertEqual(codex["sandboxPolicy"]["type"].text, "readOnly")
+    XCTAssertEqual(codex["approvalPolicy"].text, "on-request"); XCTAssertEqual(codex["sandboxPolicy"]["type"].text, "workspaceWrite")
     XCTAssertTrue(codex.pretty.contains("SELECT b.TRACE_ID"))
     XCTAssertTrue(try ClaudeProtocol.input(c, memory: memory).pretty.contains("SELECT b.TRACE_ID"))
     XCTAssertEqual(c.items.last?.text, "之前的 SQL？")

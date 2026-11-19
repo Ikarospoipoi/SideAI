@@ -15,6 +15,11 @@ extension SessionStore {
     guard let c = selected, c.canSendContent, !isBusy, !syncing else { return false }
     return currentConnectionReady
   }
+  var selectedModelOption: ModelOption? {
+    guard let id = selected?.modelID, !id.isEmpty else { return nil }
+    let option = availableModels.first { $0.id == id } ?? ModelOption(id: id)
+    return selectedProfile.map { option.withDocumentedCapabilities(for: $0) } ?? option
+  }
   func selectModel(_ model: ModelOption) {
     guard let c = selected, !isBusy else { return }
     mutate(c.id) { $0.modelID = model.id; $0.reasoningEffort = model.defaultEffort }
@@ -52,6 +57,7 @@ extension SessionStore {
     if let i = next.firstIndex(where: { $0.id == profile.id }) { next[i] = profile } else { next.append(profile) }
     settings.apiProfiles = next; settings.selectedProfileID = profile.id
     apiModels[profile.id] = nil
+    connectionFeedbackByRoute[profile.routeID] = nil
     if settings.activeRoutes?[ConnectionRoute.api(profile).selectionGroup] == nil { settings.activeRoutes = ConnectionPolicy.activated(.api(profile), in: settings.activeRoutes ?? [:]) }
     saveNow()
     connectionNotice = isRouteActive(.api(profile)) ? "已保存并启用；密钥保存在钥匙串。" : "已保存为备用连接。点击启用后再测试，同服务商的其他聊天通道会成为备用，Agent 不受影响。"
@@ -60,6 +66,7 @@ extension SessionStore {
     guard isRouteActive(.api(profile)) else { connectionNotice = "请先启用此连接，再测试。"; return }
     guard testingProfiles.insert(profile.id).inserted else { return }
     connectionNotice = "正在连接 \(profile.name)…"
+    recordConnectionFeedback(ConnectionFeedback(title: "正在读取模型列表…"), for: .api(profile))
     Task {
       let http = HTTPChatClient()
       defer { http.cancel(); testingProfiles.remove(profile.id) }
@@ -73,7 +80,14 @@ extension SessionStore {
         }
         connectionNotice = "连接成功 · \(apiModels[profile.id]?.count ?? 0) 个模型"
         apiConnectionStatus[profile.id] = "API 模型列表可达"
-      } catch { connectionNotice = error.localizedDescription; apiConnectionStatus[profile.id] = "API 测试失败" }
+        recordConnectionFeedback(ConnectionFeedback(title: "模型列表可达 · 推理尚待验证", detail: "已读取模型列表；发送消息时才会验证所选模型的权限与额度。"), for: .api(profile))
+      } catch {
+        connectionNotice = error.localizedDescription; apiConnectionStatus[profile.id] = "API 测试失败"
+        if supportsConnectionFeedback(.api(profile)) {
+          let feedback = ConnectionFeedback.failure(error, title: "模型列表读取失败")
+          recordConnectionFeedback(feedback, for: .api(profile)); connectionNotice = feedback.detail
+        }
+      }
     }
   }
   func loginDevice() {
@@ -99,6 +113,7 @@ extension SessionStore {
   func sendAPI(_ c: Conversation, memory: MemoryContext? = nil) {
     guard let profile = profiles.first(where: { $0.id == c.profileID }) else { banner = "请在设置中添加 API 连接，并新建该连接的会话。"; return }
     preparingAPI = true
+    recordConnectionFeedback(ConnectionFeedback(title: "正在请求…"), for: .api(profile))
     apiTasks[c.id] = Task {
       defer { preparingAPI = false; apiTasks[c.id] = nil; apiClients[c.id]?.cancel(); apiClients[c.id] = nil; saveNow() }
       var secret = ""
@@ -110,7 +125,7 @@ extension SessionStore {
         var context = c
         var user = TimelineItem(kind: "userMessage", text: c.draft); user.attachments = c.images
         context.items.append(user)
-        let body = try APIRequestBuilder.body(conversation: context, format: profile.format, model: c.modelID ?? profile.defaultModel, memory: memory)
+        let body = try APIRequestBuilder.body(conversation: plannedContext(context, memory: memory), format: profile.format, model: c.modelID ?? profile.defaultModel, memory: memory)
         banner = nil
         let itemID = UUID().uuidString; responseID = itemID
         mutate(c.id) {
@@ -120,17 +135,35 @@ extension SessionStore {
         }
         preparingAPI = false; saveNow()
         let http = HTTPChatClient(); apiClients[c.id] = http
-        let text = try await http.stream(profile: profile, key: secret, body: body) { [weak self] text in
+        let update: @MainActor (String) -> Void = { [weak self] text in
           self?.mutate(c.id) { $0.upsert(TimelineItem(id: itemID, kind: "agentMessage", text: text, status: "inProgress")) }
+        }
+        let text: String
+        if usesMemoryTools(for: c) {
+          if enhanced(c) {
+            text = try await http.streamWithMemory(profile: profile, key: secret, body: body, inputBudget: preferences(for: c).contextBudget, execute: { [weak self] name, args in
+              guard let self else { throw CancellationError() }
+              return try await self.executeMemoryTool(name, arguments: args, conversationID: c.id)
+            }, update: update)
+          } else {
+          text = try await http.streamWithMemory(profile: profile, key: secret, body: body, execute: { [weak self] name, args in
+            guard let self else { throw CancellationError() }
+            return try await self.executeMemoryTool(name, arguments: args, conversationID: c.id)
+          }, update: update)
+          }
+        } else {
+          text = try await http.stream(profile: profile, key: secret, body: body, update: update)
         }
         try Task.checkCancellation()
         mutate(c.id) { $0.upsert(TimelineItem(id: itemID, kind: "agentMessage", text: text)); $0.status = .completed }
         apiConnectionStatus[profile.id] = "API 已连接 · 上次请求成功"
+        recordConnectionFeedback(ConnectionFeedback(title: "上次请求成功", detail: "当前连接已完成一次回复；不代表后续请求的额度保证。"), for: .api(profile))
         onCompletion?()
       } catch {
         if let failure = error as? HTTPChatFailure { mutate(c.id) { $0.lastHTTPFailure = failure.diagnostic } }
         let cancelled = Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled
-        let message = secret.isEmpty ? error.localizedDescription : error.localizedDescription.replacingOccurrences(of: secret, with: "[redacted]")
+        let message = cancelled ? "" : connectionFailureMessage(error, for: .api(profile), secret: secret)
+        if cancelled { recordConnectionFeedback(ConnectionFeedback(title: "请求已停止", detail: "停止操作不代表连接失效；没有自动重发。"), for: .api(profile)) }
         if let responseID {
           mutate(c.id) {
             $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : message

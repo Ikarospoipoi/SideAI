@@ -84,16 +84,30 @@ final class WorkspaceTests: XCTestCase {
     let restored = SessionStore(directory: dir); defer { restored.shutdown() }
     XCTAssertEqual(restored.selected?.workspace, .chat); XCTAssertEqual(restored.selected?.claudeChatOnly, true)
   }
-  func testDuplicateIdentityAndReadOnlyClaudeToolBoundary() throws {
+  func testDuplicateIdentityAndNativeClaudeAgentPermissions() throws {
     var a = ProviderKind.openai.preset(), b = ProviderKind.openai.preset()
     XCTAssertTrue(a.duplicates(b)); b.accountLabel = "工作账号"; XCTAssertFalse(a.duplicates(b))
     b.accountLabel = nil; b.authentication = .chatgptPlan; XCTAssertFalse(a.duplicates(b))
     a.authentication = .chatgptPlan; a.oauthClientID = "one"; b.oauthClientID = "two"; XCTAssertFalse(a.duplicates(b))
-    var c = Conversation(cwd: "/tmp"); c.backend = .claude; c.claudeAgentEnabled = true; c.claudeSessionID = UUID().uuidString
-    XCTAssertFalse(ClaudePermissions.tools(for: c).contains("Write")); XCTAssertFalse(ClaudePermissions.tools(for: c).contains("Bash"))
-    c.mode = .project; let args = try ClaudeProtocol.arguments(conversation: c)
-    XCTAssertTrue(args.contains("--restricted")); XCTAssertTrue(args.contains("stdio")); XCTAssertTrue(ClaudePermissions.tools(for: c).contains("Edit"))
+    // Old stored readOnly/disabled flags no longer trap an Agent in a file-only runtime.
+    var c = Conversation(cwd: "/tmp"); c.backend = .claude; c.mode = .readOnly; c.claudeAgentEnabled = false; c.claudeSessionID = UUID().uuidString
+    XCTAssertEqual(ClaudePermissions.tools(for: c), ["default"])
+    let args = try ClaudeProtocol.arguments(conversation: c)
+    XCTAssertFalse(args.contains("--restricted")); XCTAssertFalse(args.contains("--safe-mode"))
+    XCTAssertTrue(args.contains("stdio")); XCTAssertTrue(args.contains("manual"))
     XCTAssertFalse(args.contains("bypassPermissions"))
+    let request: JSON = .object(["type": .string("control_request"), "request_id": .string("shell"), "request": .object(["subtype": .string("can_use_tool"), "tool_name": .string("Bash"), "input": .object(["command": .string("pwd")])])])
+    XCTAssertNotNil(ClaudePermissions.approval(event: request, conversation: c))
+    var native = ClaudeStreamState(allowedTools: ClaudePermissions.tools(for: c))
+    let initialized: JSON = .object(["type": .string("system"), "subtype": .string("init"), "tools": .array([.string("Bash"), .string("Write"), .string("mcp__custom__query")]), "mcp_servers": .array([.object(["name": .string("custom")])])])
+    XCTAssertNoThrow(try native.receive(initialized))
+    c.claudeChatOnly = true
+    XCTAssertNil(ClaudePermissions.approval(event: request, conversation: c))
+    var chat = ClaudeStreamState(allowedTools: ClaudePermissions.tools(for: c))
+    XCTAssertThrowsError(try chat.receive(initialized))
+    c.backend = .codex; c.claudeChatOnly = nil
+    XCTAssertEqual(c.codexTurnParams(threadID: "old-thread")["sandboxPolicy"]["type"].text, "workspaceWrite")
+
   }
   func testOAuthLoopbackRejectsUnrelatedStateAndAcceptsExpectedCallback() async throws {
     let listener = OAuthLoopback(); defer { listener.cancel() }

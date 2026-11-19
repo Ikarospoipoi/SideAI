@@ -63,6 +63,7 @@ extension SessionStore {
         try Task.checkCancellation()
         accountModels[runtime] = AccountClient.models(session)
         var connected = settings.connectedRuntimes ?? []; if !connected.contains(runtime) { connected.append(runtime) }; settings.connectedRuntimes = connected
+        recordConnectionFeedback(ConnectionFeedback(title: "账号已登录 · 推理尚待验证"), for: runtime.route)
         accountLoginStatus = "\(runtime.name) 已连接"; saveNow()
         switchConnection(runtime.route)
       } catch is CancellationError { accountLoginStatus = "已取消登录。" }
@@ -113,6 +114,7 @@ extension SessionStore {
   func refreshAccountModels(_ runtime: AccountRuntime) {
     guard !isBusy else { return }
     guard accountModelTasks[runtime] == nil else { return }
+    recordConnectionFeedback(ConnectionFeedback(title: "正在读取模型列表…"), for: runtime.route)
     accountModelTasks[runtime] = Task {
       let client = AccountClient(root: persistence.directory); defer { client.stop(); accountModelTasks[runtime] = nil }
       do {
@@ -122,14 +124,20 @@ extension SessionStore {
         try Task.checkCancellation()
         guard (settings.connectedRuntimes ?? []).contains(runtime) else { return }
         accountModels[runtime] = AccountClient.models(session); connectionNotice = "模型已更新"
+        recordConnectionFeedback(ConnectionFeedback(title: "客户端已响应 · 推理尚待验证"), for: runtime.route)
         if let id = selectedID, selected?.accountRuntime == runtime, selected?.modelID == nil { mutate(id) { $0.modelID = accountModels[runtime]?.first?.id } }
-      } catch is CancellationError { }
-      catch { connectionNotice = error.localizedDescription }
+      } catch is CancellationError {
+        recordConnectionFeedback(ConnectionFeedback(title: "检查已取消"), for: runtime.route)
+      } catch {
+        let feedback = ConnectionFeedback.failure(error, title: "模型列表读取失败")
+        recordConnectionFeedback(feedback, for: runtime.route); connectionNotice = feedback.detail
+      }
     }
   }
   func sendAccount(_ c: Conversation, memory: MemoryContext? = nil) {
     guard let runtime = c.accountRuntime, let path = RuntimeEnvironment.find(runtime.executable) else { banner = "请重新连接账号。"; return }
     preparingAPI = true
+    recordConnectionFeedback(ConnectionFeedback(title: "正在请求…"), for: runtime.route)
     let client = AccountClient(root: persistence.directory); accountClients[c.id] = client
     accountTasks[c.id] = Task {
       var responseID: String?
@@ -144,7 +152,7 @@ extension SessionStore {
         if let model = c.modelID, !model.isEmpty {
           try await client.setModel(model, session: session)
         }
-        let prompt = try AccountClient.prompt(c, memory: memory)
+        let prompt = try accountPromptWithBudget(c, memory: memory)
         try Task.checkCancellation()
         let id = UUID().uuidString; responseID = id
         mutate(c.id) {
@@ -159,14 +167,17 @@ extension SessionStore {
         try Task.checkCancellation()
         guard result["stopReason"].text == "end_turn", !answer.isEmpty else { throw ProtocolError.message("回复未完整结束，请重试。") }
         mutate(c.id) { $0.upsert(TimelineItem(id: id, kind: "agentMessage", text: answer)); $0.status = .completed; $0.updatedAt = Date() }; onCompletion?()
+        recordConnectionFeedback(ConnectionFeedback(title: "上次请求成功"), for: runtime.route)
       } catch {
         let cancelled = Task.isCancelled || error is CancellationError
+        let message = cancelled ? "" : connectionFailureMessage(error, for: runtime.route)
+        if cancelled { recordConnectionFeedback(ConnectionFeedback(title: "请求已停止"), for: runtime.route) }
         if let id = responseID {
           mutate(c.id) {
-            $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : error.localizedDescription
+            $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : message
             if let i = $0.items.firstIndex(where: { $0.id == id }) { $0.items[i].status = cancelled ? "interrupted" : "failed" }
           }
-        } else { mutate(c.id) { $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : error.localizedDescription } }
+        } else { mutate(c.id) { $0.status = cancelled ? .interrupted : .failed; $0.error = cancelled ? nil : message } }
       }
     }
   }

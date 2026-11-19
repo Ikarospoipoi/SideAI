@@ -2,6 +2,24 @@ import XCTest
 import SideAICore
 @testable import SideAI
 final class MemoryStoreTests: XCTestCase {
+  @MainActor func testResponsesUsesToolsWithoutEagerSearchAndRevokesAccess() async throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let store = SessionStore(directory: dir); defer { store.shutdown() }
+    let p = APIProfile(); store.settings.apiProfiles = [p]
+    var c = Conversation(cwd: dir.path); c.backend = .api; c.profileID = p.id; c.draft = "SQL"
+    var old = Conversation(cwd: dir.path); old.title = "SQL"; old.items = [TimelineItem(kind: "agentMessage", text: "SELECT 42")]
+    store.state.conversations = [c, old]
+    let initial = await store.memoryContext(for: c)
+    XCTAssertTrue(initial.sources.isEmpty)
+    let result = try await store.executeMemoryTool("search_history", arguments: #"{"query":"SQL","offset":0}"#, conversationID: c.id)
+    XCTAssertEqual(result["sources"].array.count, 1)
+    XCTAssertEqual(store.state.conversations[0].lastMemory?.sources.count, 1)
+    store.settings.crossConversationMemory = false
+    let revoked = try await store.executeMemoryTool("search_history", arguments: #"{"query":"SQL","offset":0}"#, conversationID: c.id)
+    XCTAssertNotEqual(revoked["error"], .null)
+    XCTAssertTrue(revoked["sources"].array.isEmpty)
+  }
   @MainActor func testDefaultOnSwitchesNotesExclusionAndAccountPrompt() async throws {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: dir) }

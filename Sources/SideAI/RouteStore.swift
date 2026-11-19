@@ -101,6 +101,7 @@ extension SessionStore {
   }
   var currentConnectionStatus: String {
     let r = currentRoute
+    if let feedback = connectionFeedback(for: r) { return feedback.title }
     guard r.backend != .chatgptArchive else { return "只读导入记录" }
     guard isRouteActive(r) else { return "此通道未启用" }
     switch r.backend {
@@ -139,7 +140,6 @@ extension SessionStore {
   func sendClaude(_ original: Conversation, memory: MemoryContext? = nil) {
     guard claudeReady, let path = ClaudeCodeClient.findCLI(custom: settings.claudePath ?? "") else { banner = "请先在设置中检测 Claude Code 登录。"; return }
     var c = original
-    if c.claudeUsesTools && c.mode == .project && c.cwd == scratch.path { banner = "请先选择项目目录。"; return }
     if c.claudeSessionID == nil { c.claudeSessionID = UUID().uuidString.lowercased() }
     do {
       let args = try ClaudeProtocol.arguments(conversation: c)

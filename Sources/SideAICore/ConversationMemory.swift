@@ -43,7 +43,7 @@ public enum ConversationMemory {
     }
     return result.subtracting(stop)
   }
-  public static func retrieve(query: String, current: Conversation, conversations: [Conversation], notes: String = "") -> MemoryContext {
+  public static func retrieve(query: String, current: Conversation, conversations: [Conversation], notes: String = "", limit: Int = 4) -> MemoryContext {
     let query = String(query.prefix(4000)), tokens = terms(query).sorted().prefix(64)
     let refersBack = ["之前", "上次", "上一个", "上一条", "刚才", "接着", "previous", "last task", "continue"].contains { query.lowercased().contains($0) }
     struct Hit { let c: Conversation; let text: String; let score: Double }
@@ -92,7 +92,7 @@ public enum ConversationMemory {
     for hit in hits {
       guard seen.insert(hit.text).inserted else { continue }
       sources.append(MemorySource(id: hit.c.id.uuidString, title: String(hit.c.title.prefix(100)), excerpt: hit.text, date: ISO8601DateFormatter().string(from: hit.c.updatedAt)))
-      if sources.count == 4 { break }
+      if sources.count >= max(1, limit) { break }
     }
     return MemoryContext(sources: sources, notes: String(notes.prefix(2000)))
   }

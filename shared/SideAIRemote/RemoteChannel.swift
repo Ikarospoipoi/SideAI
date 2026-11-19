@@ -26,7 +26,12 @@ import Foundation
           try pairing.validate()
           let config = URLSessionConfiguration.ephemeral; config.httpCookieStorage = nil; config.urlCredentialStorage = nil; config.timeoutIntervalForRequest = 20
           let session = URLSession(configuration: config, delegate: self, delegateQueue: nil); self.session = session
-          let ws = session.webSocketTask(with: try RemotePairing.endpoint(pairing.relay)); ws.maximumMessageSize = 2_000_000; self.socket = ws
+          var request = URLRequest(url: try RemotePairing.endpoint(pairing.relay))
+          request.setValue(pairing.room, forHTTPHeaderField: "X-SideAI-Room")
+          request.setValue(role, forHTTPHeaderField: "X-SideAI-Role")
+          request.setValue(pairing.relayToken(role), forHTTPHeaderField: "X-SideAI-Token")
+          request.setValue(pairing.phoneHash, forHTTPHeaderField: "X-SideAI-Phone-Hash")
+          let ws = session.webSocketTask(with: request); ws.maximumMessageSize = 2_000_000; self.socket = ws
           self.onStatus?("正在连接中继…", false); ws.resume()
           let join: RemoteValue = .object(["join": .bool(true), "room": .string(pairing.room), "role": .string(role), "token": .string(pairing.relayToken(role)), "phoneHash": .string(pairing.phoneHash)])
           try await ws.send(.string(String(decoding: JSONEncoder().encode(join), as: UTF8.self)))

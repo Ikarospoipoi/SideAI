@@ -14,7 +14,30 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(401); self.end_headers(); self.wfile.write(b'{"error":{"message":"invalid fixture-key"}}'); return
         self.send_response(200); self.send_header('Content-Type', 'text/event-stream'); self.end_headers()
         if '/slow/' in self.path: time.sleep(3)
-        if '/quota/' in self.path:
+        if '/memory-' in self.path:
+            inputs = body.get('input', [])
+            outputs = [x for x in inputs if x.get('type') == 'function_call_output']
+            n = len(outputs)
+            def call(name, args, namespace='sideai_memory'):
+                return {'type':'function_call','id':f'fc{n}','call_id':f'call{n}','namespace':namespace,'name':name,'arguments':json.dumps(args),'status':'completed'}
+            if '/memory-loop/' in self.path:
+                items = [call('search_history', {'query':'SQL','offset':0})]
+            elif '/memory-unknown/' in self.path and not outputs:
+                items = [call('run_shell', {'command':'anything'}, 'other')]
+            elif not outputs:
+                items = [{'type':'reasoning','id':'r1','summary':[], 'encrypted_content':'fixture-reasoning'}, call('search_history', {'query':'SQL','offset':0})]
+            elif n == 1 and '/memory-unknown/' not in self.path:
+                assert any(x.get('encrypted_content') == 'fixture-reasoning' for x in inputs)
+                assert 'fixture-source' in outputs[0]['output']
+                items = [call('read_history', {'conversation_id':'fixture-source','offset':0})]
+            else:
+                items = [{'type':'message','role':'assistant','phase':'final_answer','content':[{'type':'output_text','text':'根据历史 SQL，答案是 42。'}]}]
+            assert body['store'] is False and 'previous_response_id' not in body
+            assert body['tools'][0]['type'] == 'namespace'
+            events = [{'type':'response.completed','response':{'output':items}}]
+            if '/memory-truncated/' in self.path:
+                events = [{'type':'response.output_item.done','item':items[-1]}]
+        elif '/quota/' in self.path:
             events = [{'type': 'error', 'error': {'type': 'invalid_request_error', 'code': 'subscription_sharing_usage_limit_exceeded', 'message': 'quota fixture-key'}}]
         elif body.get('model') != 'fixture-vision':
             events = [{'error': {'message': 'model was not routed'}}]

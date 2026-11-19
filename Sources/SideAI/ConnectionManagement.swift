@@ -23,6 +23,7 @@ extension SessionStore {
       var removed = settings.removedAPIProfiles ?? []; removed.removeAll { $0.id == id }; removed.append(profile)
       settings.removedAPIProfiles = removed; settings.apiProfiles = profiles.filter { $0.id != id }
       apiModels[id] = nil; apiConnectionStatus[id] = nil
+      connectionFeedbackByRoute[route.id] = nil
       if settings.selectedProfileID == id { settings.selectedProfileID = nil }
     } else if route.id == ConnectionRoute.claudeChat.id {
       settings.claudeChatEnabled = false

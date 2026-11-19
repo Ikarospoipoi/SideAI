@@ -1,6 +1,10 @@
 # SideAI
 
-**iPhone 遥控（v0.11.0）：** 新增原生 iOS 客户端和 macOS 手机遥控入口，支持异地查看任务、发指令、切模型及审批。附带自托管加密中继，先用 Xcode 安装到自己的 iPhone。见 [安装与部署指南](docs/IOS_REMOTE.md)。
+**下载当前 Mac 开发版（2026-11-19）：** [SideAI 安装包 · Apple Silicon](https://github.com/Ikarospoipoi/SideAI/raw/refs/heads/main/releases/SideAI-0.11.0-workbench-20261119-macOS-arm64.zip)。解压后将 `SideAI.app` 拖到“应用程序”；需要 macOS 14 或更新版本。此包为 ad-hoc 签名、未公证，安装方式、校验值和各端构建状态见 [安装包说明](releases/README.md)。
+
+**工作台（开发版）：** 新增全文搜索、项目记忆范围、上下文预算、项目配置、串行队列、快捷文本与文件读取、分支与导出；Windows 和 iPhone 同步补充部分能力。Claude 保留原有功能。各端支持范围与使用方法见 [工作台说明](docs/PRODUCTIVITY.md)。
+
+**iPhone 遥控（v0.11.0）：** 原生 iOS 客户端和 macOS 手机遥控入口，支持异地查看任务、发指令、切模型及审批。内置 Cloudflare 加密中继，扫码配对；也支持自部署中继。先用 Xcode 安装到自己的 iPhone。见 [安装与部署指南](docs/IOS_REMOTE.md) 和 [Cloudflare 中继说明](cloudflare-relay/README.md)。
 
 **Windows 版本：** 新增 `windows/` 客户端，支持游戏内热键唤出、鼠标释放、返回原窗口，以及聊天 / Agent 连接。安装、功能对照与游戏兼容边界见 [Windows 使用指南](windows/README.md)。Windows 安装包由 [GitHub Actions](https://github.com/Ikarospoipoi/SideAI/actions/workflows/windows.yml) 构建。
 
@@ -44,16 +48,13 @@
 
 ## Agent 权限与项目
 
-聊天模式的 API / 独立 ChatGPT 连接不执行本机工具。Agent 模式区分 Codex 与 Claude Code；下表是 Codex 的权限策略。Claude Code 新任务在只读模式提供 Read / Glob / Grep，项目模式增加 Edit / Write，写入需逐次确认；旧 Claude Code 会话仍为无工具模式。
+聊天模式不执行本机命令或修改文件。Agent 只有一个入口，不再区分“只读／项目”。旧会话保存的模式不会限制下一轮执行，也不需要重新建会话。
 
-| 模式 | 本地命令沙箱 |
-| --- | --- |
-| 只读 Agent（默认） | `readOnly`，禁用命令网络访问；读取文件与只读命令仍可能执行，写入/越界需后端审批 |
-| 项目 Agent | `workspaceWrite`，写入根限定为用户选取的项目；命令网络关闭，排除临时目录的隐式写入权限，额外权限按后端审批 |
+- Codex 使用 `workspace-write` 与 `approvalPolicy=on-request`：可在当前工作目录执行命令和修改文件，越界／额外权限由后端请求用户审批。命令网络默认关闭。
+- Claude Code 使用官方默认工具集（含 Bash、Read、Edit、Write 等）和 `manual` 权限模式，沿用 CLI 的权限规则与已配置工具；需要确认的调用通过 stdio 显示在 SideAI。Agent 不再附加 `--restricted` 或 `--safe-mode`。
+- 不使用 `bypassPermissions`。纯聊天仍关闭执行工具；未支持的控制请求明确拒绝。
 
-新会话默认工作目录是 `~/Library/Application Support/SideAI/Scratch`，不是整个主目录。执行项目任务时选择项目，再选“项目 Agent”。已有会话也可在空闲时重选项目，下一轮同时更新工作目录与写入沙箱根；只读 / 项目模式均可选目录。默认 `approvalPolicy=on-request`、`approvalsReviewer=user`，不会把审批交给自动代理。
-
-只读是本地文件/命令沙箱，不是禁止所有工具的隔离机制，也不是把读取范围限制在当前目录。CLI 自身的用户配置仍会生效，外部 MCP 工具的副作用不由本地文件沙箱约束。本客户端关闭 Apps 与多 Agent 功能；未支持的服务端交互请求明确拒绝，不暗中批准。
+新会话默认工作目录是 `~/Library/Application Support/SideAI/Scratch`。执行现有项目任务时点击“选择项目”；未选择时也可以在默认目录开始。已有会话在空闲时重选项目，下一轮同步更新工作目录与 Codex 写入沙箱根。手机端和 Windows 端采用同样的单一 Agent 入口。
 
 支持图片按钮、拖入图片文件、截图文件承诺和粘贴图片。图片立即复制到本地附件库，以免系统临时截图消失；每条最多 8 张、每张原文件最多 20 MB，转为最长边 2048 像素的 PNG（动图只取首帧）。发送时作为真实 localImage / API 图片输入，不作为文件路径文字。暂不支持其他文件附件或语音。输入框已移除占位文字，避免与中文输入法组词重叠。
 
@@ -71,7 +72,7 @@ python3 scripts/protocol_smoke.py --live  # 使用真实账户额度的协议检
 python3 scripts/lifecycle_smoke.py       # 使用真实账户额度的崩溃/恢复检查
 ```
 
-产物位于 `build/SideAI.app`。仅做本机 ad-hoc 签名，未公证、未发布。跨机器分发需要另行签名与公证，不要求付费开发者账号即可在此机开发运行。
+产物位于 `build/SideAI.app`。仓库提供 ad-hoc 签名的开发版压缩包，未进行 Apple 公证；常规分发仍需开发者签名与公证。本机开发构建不要求付费开发者账号。
 
 ## Codex 配置与登录
 

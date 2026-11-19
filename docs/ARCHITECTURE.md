@@ -10,9 +10,9 @@
 
 `ChatGPTLoginAttempt` 实现官方动态客户端授权、PKCE、state、nonce；`ChatGPTIdentity` 校验 RS256/JWKS、issuer/audience/expiry/subject。`OAuthLoopback` 只监听 127.0.0.1 随机端口，拒绝不匹配回调，最多等待 5 分钟。认证 HTTP 不跟随重定向；凭据按连接 UUID 保存至 Keychain，续期按连接合并。不会复用 Codex 凭据。真实 OAuth 授权 / 推理仍待首次用户登录验证。
 
-Claude 新任务采用受限文件工具、manual 权限模式和 stdio 控制协议；服务端 `can_use_tool` 转为可拒绝 / 单次批准的 UI 请求。只读任务不注册写入工具；旧任务沿用空工具集。工具清单与 init 返回进行校验，未知控制请求明确拒绝。真实 Write 拒绝 / 批准已通过本机 CLI 验证。
+2026-11-12：Agent 统一为执行模式；历史 `AgentMode` 字段仅为数据兼容保留，不再决定运行权限。Codex 的 thread/start、resume 和每轮 turn/start 都使用 workspace-write，避免已载入旧线程继续保留只读设置。Claude Agent 使用默认工具集和 manual/stdin 审批，移除 restricted、安全模式及空 MCP 覆盖，继承对应 CLI 配置；旧 Agent 同样生效。Claude 纯聊天继续禁用工具并校验 init 返回。项目选择只改变工作目录，不再兼任权限开关。
 
-以下按各版本记录实现细节；v0.3 的服务商互斥与空工具集描述只适用于旧版本 / 旧 Claude 会话。
+以下按各版本记录实现细节；v0.3 的服务商互斥与空工具集描述只适用于旧版本。
 
 ## 目录
 

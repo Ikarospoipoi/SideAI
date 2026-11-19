@@ -49,16 +49,16 @@ export async function runCodex(runtime:Runtimes,connection:Connection,c:Conversa
     if(method==='error'&&!p.willRetry)reject(Error(p.error?.message??'后端错误'));hooks.changed();
   });
   try{
-    const params={cwd:c.cwd,sandbox:c.mode==='project'?'workspace-write':'read-only',approvalPolicy:'on-request',approvalsReviewer:'user',config:{'features.apps':false,'features.multi_agent':false},...(c.model?{model:c.model}:{}),...(c.threadID?{threadId:c.threadID}:{})};
+    const params={cwd:c.cwd,sandbox:'workspace-write',approvalPolicy:'on-request',approvalsReviewer:'user',config:{'features.apps':false,'features.multi_agent':false},...(c.model?{model:c.model}:{}),...(c.threadID?{threadId:c.threadID}:{})};
     const r=await rpc.request(c.threadID?'thread/resume':'thread/start',params);c.threadID=r.thread.id;hooks.save();
     if(signal.aborted)throw Error('已停止');const user=c.items.filter(i=>i.role==='user').at(-1)!;
-    const sandboxPolicy=c.mode==='project'?{type:'workspaceWrite',writableRoots:[c.cwd],networkAccess:false,excludeSlashTmp:true,excludeTmpdirEnvVar:true}:{type:'readOnly',networkAccess:false};
+    const sandboxPolicy={type:'workspaceWrite',writableRoots:[c.cwd],networkAccess:false,excludeSlashTmp:true,excludeTmpdirEnvVar:true};
     await rpc.request('turn/start',{threadId:c.threadID,input:[...(augment(user.text,memory)?[{type:'text',text:augment(user.text,memory)}]:[]),...(user.images??[]).map(a=>({type:'localImage',path:a.path}))],cwd:c.cwd,approvalPolicy:'on-request',approvalsReviewer:'user',sandboxPolicy,...(c.model?{model:c.model}:{}),...(c.effort?{effort:c.effort}:{})});await completed;
   }finally{signal.removeEventListener('abort',stop);rpc.stop();for(const a of pending.values())hooks.resolved(a.id);if(interrupted)c.status='interrupted';}
 }
 export async function runClaude(runtime:Runtimes,connection:Connection,c:Conversation,hooks:AgentHooks,signal:AbortSignal,memory?:MemoryContext){
-  const tools=c.mode==='project'?['Read','Glob','Grep','Edit','Write']:['Read','Glob','Grep'];c.sessionID??=randomUUID();hooks.save();
-  const args=['-p','--input-format','stream-json','--output-format','stream-json','--verbose','--include-partial-messages','--safe-mode','--strict-mcp-config','--mcp-config','{"mcpServers":{}}','--tools',tools.join(','),'--permission-mode','manual','--disable-slash-commands','--restricted','--permission-prompt-tool','stdio',c.hasSession?'--resume':'--session-id',c.sessionID,...(c.model?['--model',c.model]:[]),...(c.effort?['--effort',c.effort]:[])];
+  c.sessionID??=randomUUID();hooks.save();
+  const args=['-p','--input-format','stream-json','--output-format','stream-json','--verbose','--include-partial-messages','--tools','default','--permission-mode','manual','--permission-prompt-tool','stdio',c.hasSession?'--resume':'--session-id',c.sessionID,...(c.model?['--model',c.model]:[]),...(c.effort?['--effort',c.effort]:[])];
   const rpc=runtime.start(connection,args,c.cwd),generation=randomUUID(),answer:Item={id:randomUUID(),role:'assistant',text:'',status:'inProgress'};c.items.push(answer);const requests=new Set<string>();
   const cancel=()=>rpc.stop(Error('已停止'));signal.addEventListener('abort',cancel,{once:true});
   try{await new Promise<void>((resolve,reject)=>{
@@ -66,11 +66,11 @@ export async function runClaude(runtime:Runtimes,connection:Connection,c:Convers
       if(m.type==='control_response'&&m.response?.request_id==='initialize'){
         if(m.response.subtype!=='success')throw Error('Claude 初始化失败');const user=c.items.filter(i=>i.role==='user').at(-1)!;rpc.send({type:'user',message:{role:'user',content:[...(augment(user.text,memory)?[{type:'text',text:augment(user.text,memory)}]:[]),...(user.images??[]).map(a=>({type:'image',source:{type:'base64',media_type:'image/png',data:a.dataURL.split(',')[1]}}))]}});
       }
-      if(m.type==='system'&&m.subtype==='init'){if((m.tools??[]).some((t:string)=>!tools.includes(t))||(m.mcp_servers??[]).length)throw Error('官方客户端启用了未授权工具，已停止。');c.hasSession=true;hooks.save();}
+      if(m.type==='system'&&m.subtype==='init'){c.hasSession=true;hooks.save();}
       if(m.type==='control_request'){
         const request=m.request,key=m.request_id,id=generation+':'+key;
         const reply=(allow:boolean)=>rpc.send({type:'control_response',response:{subtype:'success',request_id:key,response:allow?{behavior:'allow',updatedInput:request.input}:{behavior:'deny',message:'SideAI 未批准此操作。'}}});
-        if(request.subtype!=='can_use_tool'||!tools.includes(request.tool_name)){reply(false);return;}if(requests.has(id))return;requests.add(id);c.status='awaitingApproval';hooks.approval({id,conversationID:c.id,method:'claude',title:request.tool_name,detail:JSON.stringify(request.input,null,2),cwd:c.cwd,created:Date.now()},allow=>{if(!rpc.closed){reply(allow);hooks.resolved(id);c.status='running';}});
+        if(request.subtype!=='can_use_tool'||typeof request.tool_name!=='string'||!request.tool_name){reply(false);return;}if(requests.has(id))return;requests.add(id);c.status='awaitingApproval';hooks.approval({id,conversationID:c.id,method:'claude',title:request.tool_name,detail:JSON.stringify(request.input,null,2),cwd:c.cwd,created:Date.now()},allow=>{if(!rpc.closed){reply(allow);hooks.resolved(id);c.status='running';}});
       }
       if(m.type==='stream_event'&&m.event?.delta?.type==='text_delta')answer.text+=m.event.delta.text;
       if(m.type==='assistant'){const text=(m.message?.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('');if(text)answer.text=text;for(const t of m.message?.content??[])if(t.type==='tool_use')c.items.push({id:t.id,role:'tool',text:t.name+'\n'+JSON.stringify(t.input,null,2),status:'completed'});}

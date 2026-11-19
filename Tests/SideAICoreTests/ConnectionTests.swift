@@ -2,6 +2,26 @@ import XCTest
 @testable import SideAICore
 
 final class ConnectionTests: XCTestCase {
+  func testChatModelReasoningCapabilitiesReachRequest() throws {
+    let row = try JSONDecoder().decode(JSON.self, from: Data(#"{"slug":"gpt-6-astra","display_name":"GPT-6-Astra","supported_reasoning_levels":[{"effort":"low"},{"effort":"high"}],"default_reasoning_level":"high"}"#.utf8))
+    let option = ModelOption(api: row, id: row["slug"].text)
+    XCTAssertEqual(option.efforts, ["low", "high"])
+    XCTAssertEqual(option.defaultEffort, "high")
+    var c = Conversation(cwd: "/tmp"); c.backend = .api; c.reasoningEffort = "high"
+    c.items = [TimelineItem(kind: "userMessage", text: "test")]
+    let body = try APIRequestBuilder.body(conversation: c, format: .responses, model: option.id)
+    XCTAssertEqual(body["reasoning"]["effort"].text, "high")
+    c.reasoningEffort = nil
+    XCTAssertEqual(try APIRequestBuilder.body(conversation: c, format: .responses, model: option.id)["reasoning"], .null)
+    XCTAssertTrue(ModelOption(api: .object([:]), id: "unknown-model").efforts.isEmpty)
+    let alternate = try JSONDecoder().decode(JSON.self, from: Data(#"{"supportedReasoningEfforts":[{"reasoningEffort":"medium"}],"defaultReasoningEffort":"invalid"}"#.utf8))
+    XCTAssertEqual(ModelOption(api: alternate, id: "fixture").efforts, ["medium"])
+    XCTAssertNil(ModelOption(api: alternate, id: "fixture").defaultEffort)
+    var profile = APIProfile()
+    XCTAssertEqual(ModelOption(id: "gpt-6-astra").withDocumentedCapabilities(for: profile).efforts, ["low", "medium", "high", "xhigh", "max"])
+    profile.baseURL = "https://another.example/v1"
+    XCTAssertTrue(ModelOption(id: "gpt-6-astra").withDocumentedCapabilities(for: profile).efforts.isEmpty)
+  }
   func testLegacySnapshotRetainsDraftAndThread() throws {
     let c = Conversation(cwd: "/tmp/project")
     var raw = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Snapshot(conversations: [c], selectedID: c.id))) as! [String: Any]

@@ -1,3 +1,5 @@
+import {enhancedConnection,memoryHistory,planContextWithMemory,readHistoryTool,searchHistory,branch,transcript} from './productivity';
+import {chatWithHistory} from './responses-memory';
 import {HTTPChatFailure} from './http-diagnostic';
 import {MemoryClient} from './memory-client';
 import {MemoryContext} from './memory';
@@ -15,7 +17,7 @@ export class Service extends EventEmitter {
   approvals:Approval[]=[];private replies=new Map<string,(allow:boolean,answers:Record<string,string>)=>void>();private timer?:NodeJS.Timeout;
   runtime:Runtimes;private memoryClient=new MemoryClient();
   async memoryPreview(id:string):Promise<MemoryContext>{return this.memoryFor(this.conversation(id));}
-  private async memoryFor(c:Conversation):Promise<MemoryContext>{if(this.state.settings.crossConversationMemory===false||c.memoryEnabled===false)return {sources:[],notes:''};return this.memoryClient.query(c,this.state.conversations,this.state.settings.sharedMemory??'');}
+  private async memoryFor(c:Conversation):Promise<MemoryContext>{if(this.state.settings.crossConversationMemory===false||c.memoryEnabled===false)return {sources:[],notes:''};return this.memoryClient.query(c,enhancedConnection(this.connection(c.connectionID),c)?memoryHistory(c,this.state.conversations):this.state.conversations,this.state.settings.sharedMemory??'');}
   constructor(public storage:Storage,private vault:Vault,private fetcher:Fetch,private open:(s:string)=>Promise<void>){super();this.runtime=new Runtimes(storage,s=>this.message(s),open,fetcher);}
   get state(){return this.storage.state;}
   view():ViewState{return {...this.state,approvals:this.approvals,busy:this.busy,notice:this.notice,loginBusy:!!this.login,hotkeyError:this.hotkeyError,platform:process.platform};}
@@ -24,12 +26,23 @@ export class Service extends EventEmitter {
   conversation(id=this.state.selected){const c=this.state.conversations.find(c=>c.id===id);if(!c)throw Error('会话不存在');return c;}
   connection(id:string){const c=this.state.connections.find(c=>c.id===id);if(!c)throw Error('连接已删除，请重新添加。');return c;}
   idle(){if(this.busy||this.login)throw Error('请先停止当前任务或完成登录。');}
-  newConversation(connectionID:string){const connection=this.connection(connectionID);const c:Conversation={id:randomUUID(),connectionID,title:'新会话',draft:'',images:[],items:[],cwd:this.storage.directory('Scratch'),mode:'readOnly',model:connection.model??connection.models[0]?.id??'',effort:'',status:'idle',updated:Date.now()};this.state.conversations.unshift(c);this.state.selected=c.id;this.state.workspace=connection.workspace;this.changed();return c;}
+  newConversation(connectionID:string){const connection=this.connection(connectionID);const c:Conversation={id:randomUUID(),connectionID,title:'新会话',draft:'',images:[],items:[],cwd:this.storage.directory('Scratch'),mode:'project',model:connection.model??connection.models[0]?.id??'',effort:'',status:'idle',updated:Date.now()};this.state.conversations.unshift(c);this.state.selected=c.id;this.state.workspace=connection.workspace;this.changed();return c;}
   select(id:string){const c=this.conversation(id);this.state.selected=id;const connection=this.state.connections.find(x=>x.id===c.connectionID);if(connection)this.state.workspace=connection.workspace;this.changed();}
   selectConnection(id:string){const c=this.state.conversations.filter(c=>c.connectionID===id&&!c.archived).sort((a,b)=>b.updated-a.updated)[0];if(c)this.select(c.id);else this.newConversation(id);}
   patch(id:string,patch:any){const c=this.conversation(id);if(patch.draft!==undefined){if(typeof patch.draft!=='string'||patch.draft.length>1000000)throw Error('输入过长');c.draft=patch.draft;}if(patch.images!==undefined){if(!Array.isArray(patch.images)||patch.images.length>8)throw Error('每条最多 8 张图片');const known=new Map([...c.images,...c.items.flatMap(i=>i.images??[])].map(a=>[a.id,a]));c.images=patch.images.map((id:string)=>{const image=known.get(id);if(!image)throw Error('图片不存在');return image;});}
     if(patch.memoryEnabled!==undefined||patch.memoryExcluded!==undefined)this.idle();
-    if(this.busy!==id){for(const key of ['memoryEnabled','memoryExcluded'] as const)if(typeof patch[key]==='boolean')c[key]=patch[key];for(const key of ['title','model','effort'] as const)if(typeof patch[key]==='string')c[key]=patch[key].slice(0,key==='title'?100:200);if(['readOnly','project'].includes(patch.mode))c.mode=patch.mode;if(typeof patch.archived==='boolean')c.archived=patch.archived;}this.changed();}
+    if(this.busy!==id){for(const key of ['memoryEnabled','memoryExcluded'] as const)if(typeof patch[key]==='boolean')c[key]=patch[key];for(const key of ['title','model','effort'] as const)if(typeof patch[key]==='string')c[key]=patch[key].slice(0,key==='title'?100:200);if(typeof patch.archived==='boolean')c.archived=patch.archived;}this.changed();}
+  patchProductivity(id:string,patch:any){
+    this.idle();const c=this.conversation(id);if(!enhancedConnection(this.connection(c.connectionID),c))throw Error('此连接保留原有功能');
+    if(['project','selected','all'].includes(patch.historyScope))c.historyScope=patch.historyScope;
+    if(Array.isArray(patch.memorySourceIDs)&&patch.memorySourceIDs.every((v:any)=>typeof v==='string'))c.memorySourceIDs=patch.memorySourceIDs.slice(0,1000);
+    if([4000,8000,16000,32000,64000].includes(patch.contextBudget))c.contextBudget=patch.contextBudget;
+    if(typeof patch.contextSummary==='string')c.contextSummary=patch.contextSummary.slice(0,16000);
+    this.changed();
+  }
+  searchText(query:string){return searchHistory(query.slice(0,4000),this.state.conversations.filter(c=>{const conn=this.state.connections.find(x=>x.id===c.connectionID);return !!conn&&enhancedConnection(conn,c);}));}
+  branchConversation(id:string){this.idle();const c=this.conversation(id),connection=this.connection(c.connectionID);if(!enhancedConnection(connection,c))throw Error('此连接保留原有功能');const copy=branch(c,connection);this.state.conversations.unshift(copy);this.select(copy.id);return copy;}
+  exportText(id:string){const c=this.conversation(id);if(!enhancedConnection(this.connection(c.connectionID),c))throw Error('此连接保留原有功能');return transcript(c);}
   addImages(images:Attachment[]){const c=this.conversation();if(c.images.length+images.length>8)throw Error('每条最多 8 张图片');c.images.push(...images);this.changed();}
   checkDuplicate(c:Connection){if(this.state.connections.some(x=>x.id!==c.id&&connectionGroup(x)===connectionGroup(c)))throw Error('这个 AI 已有连接，请在“管理连接”编辑或删除原连接。聊天与 Agent 可以分别连接。');}
   saveAPI(raw:any){this.idle();const old=raw.id?this.connection(raw.id):undefined;
@@ -100,7 +113,8 @@ export class Service extends EventEmitter {
     const signal=this.run.signal;
     const hooks:AgentHooks={changed:()=>this.changed(),save:()=>this.storage.save(),approval:(a,reply)=>{this.approvals.push(a);this.replies.set(a.id,reply);this.changed();this.emit('attention');},resolved:id=>{this.approvals=this.approvals.filter(a=>a.id!==id);if(id)this.replies.delete(id);this.changed();}};
     try{
-      const memory=await this.memoryFor(before);
+      const useHistoryTools=enhancedConnection(connection,c)&&connection.format==='responses'&&this.state.settings.crossConversationMemory!==false&&c.memoryEnabled!==false;
+      const memory=useHistoryTools?{sources:[],notes:(this.state.settings.sharedMemory??'').slice(0,2000)}:await this.memoryFor(before);
       if(signal.aborted)throw Error('已停止');
       c.lastMemory=memory;user.memory=memory;this.changed();
       if(connection.engine==='codex')await runCodex(this.runtime,connection,c,hooks,signal,memory);
@@ -115,9 +129,16 @@ export class Service extends EventEmitter {
             const session=await rpc.request('session/new',{cwd:this.runtime.prepare(connection.engine),mcpServers:[]});
             if(c.model){const config=session.configOptions?.find((m:any)=>m.category==='model'||m.id==='model');await rpc.request(config?'session/set_config_option':'session/set_model',config?{sessionId:session.sessionId,configId:config.id,value:c.model}:{sessionId:session.sessionId,modelId:c.model});}
             rpc.on('event',m=>{const u=m.params?.update;if(m.method==='session/update'){if(['tool_call','tool_call_update'].includes(u?.sessionUpdate)){rpc.stop(Error('聊天模式检测到工具调用，已停止。'));return;}if(u?.sessionUpdate==='agent_message_chunk'&&u.content?.type==='text'){answer.text+=u.content.text;this.changed();}}});
-            if(signal.aborted)throw Error('已停止');const result=await rpc.request('session/prompt',{sessionId:session.sessionId,prompt:acpPrompt(c,memory)},300000);if(result.stopReason!=='end_turn')throw Error('回复未完整结束');
+            if(signal.aborted)throw Error('已停止');const result=await rpc.request('session/prompt',{sessionId:session.sessionId,prompt:acpPrompt(enhancedConnection(connection,c)?planContextWithMemory(c,memory):c,memory)},300000);if(result.stopReason!=='end_turn')throw Error('回复未完整结束');
           }finally{signal.removeEventListener('abort',cancel);rpc.stop();}
-        }else{const key=await this.credential(connection);await chat(this.fetcher,connection,c,key,signal,t=>{answer.text=t;this.changed();},memory);}answer.status='completed';c.status='completed';}finally{if(answer.status==='inProgress')answer.status='interrupted';}
+        }else{const key=await this.credential(connection);const context=enhancedConnection(connection,c)?planContextWithMemory(c,memory):c;
+          const update=(t:string)=>{answer.text=t;this.changed();};
+          if(useHistoryTools)await chatWithHistory(this.fetcher,connection,context,key,signal,update,memory,async(name,args)=>{
+            if(this.state.settings.crossConversationMemory===false||c.memoryEnabled===false)return {error:'历史访问已关闭'};
+            const {result,sources}=readHistoryTool(name,args,c,this.state.conversations);
+            c.lastMemory??={sources:[],notes:memory.notes};for(const source of sources){const i=c.lastMemory.sources.findIndex(s=>s.id===source.id);if(i>=0)c.lastMemory.sources[i]=source;else c.lastMemory.sources.push(source);}user.memory=c.lastMemory;this.changed();return result;
+          });else await chat(this.fetcher,connection,context,key,signal,update,memory);
+        }answer.status='completed';c.status='completed';}finally{if(answer.status==='inProgress')answer.status='interrupted';}
       }
       this.emit('completed');
     }catch(e){if(e instanceof HTTPChatFailure)c.lastHTTPFailure=e.diagnostic;c.status=signal.aborted?'interrupted':'failed';this.notice=signal.aborted?'已停止。':safeError(e);}finally{this.approvals=this.approvals.filter(a=>a.conversationID!==id);this.replies.clear();this.busy=undefined;this.run=undefined;this.storage.save();this.changed();}

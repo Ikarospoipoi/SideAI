@@ -1,0 +1,15 @@
+---
+description: 保留 Claude 功能，日常开发不修改或调用 Claude
+alwaysApply: true
+---
+
+# Claude 开发边界
+
+- 用户要求保留现有功能；不要隐藏、禁用、删除或迁移 Claude 的连接、代码、配置、凭据和历史。
+- 除非用户明确授权 Claude 专项开发，不修改 ClaudeCodeClient、ClaudeProtocol、ClaudePermissions、ClaudeTransportTests 及各端 Claude 专属分支。
+- 不运行 Claude CLI（含版本、登录、状态检测、登出）、Claude API、聚合平台的 Claude 模型或真实 Claude 测试。
+- 不启动可能自动恢复 Claude 连接的应用，不通过切换连接、手机遥控、重置等操作间接触发 Claude。
+- 公共方法可能被 Claude 使用；采用独立实现和最小接入点，保持 Claude 现有行为。不要因类名包含 Claude 就删除其他后端的公共依赖。
+- 测试显式选择本地确定性测试，审查选中的测试路径；不直接运行全量集成测试或 live/smoke 脚本。
+- 不能把读取源码、编译保留代码等同于调用 Claude。可以静态检查边界，但不执行 Claude 路径。
+- 开工记录已有改动，结束比较本轮差异，确认未覆盖用户改动或改变 Claude 专属分支。

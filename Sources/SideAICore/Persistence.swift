@@ -1,6 +1,7 @@
 import Foundation
 
 public struct AppSettings: Codable {
+  public var productivity: ProductivitySettings?
   public var connectedRuntimes: [AccountRuntime]?
   public var connectedAgentIDs: [String]?
   public var isolatedAgentLogin: Bool?

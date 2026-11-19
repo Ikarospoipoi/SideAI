@@ -1,13 +1,27 @@
 name: iOS and remote control
 on:
   push:
-    paths: ['ios/**', 'shared/**', 'Sources/**', 'Tests/**', 'Package.swift', 'remote-relay/**', '.github/workflows/remote.yml']
+    paths: ['ios/**', 'shared/**', 'Sources/**', 'Tests/**', 'Package.swift', 'remote-relay/**', 'cloudflare-relay/**', '.github/workflows/remote.yml']
   pull_request:
-    paths: ['ios/**', 'shared/**', 'Sources/**', 'Tests/**', 'Package.swift', 'remote-relay/**', '.github/workflows/remote.yml']
+    paths: ['ios/**', 'shared/**', 'Sources/**', 'Tests/**', 'Package.swift', 'remote-relay/**', 'cloudflare-relay/**', '.github/workflows/remote.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  cloudflare-relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts
+        working-directory: cloudflare-relay
+      - run: npm test
+        working-directory: cloudflare-relay
+      - run: npx wrangler deploy --dry-run
+        working-directory: cloudflare-relay
   remote:
     runs-on: macos-latest
     timeout-minutes: 20

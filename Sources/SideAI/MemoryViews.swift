@@ -20,7 +20,7 @@ struct MemoryPreviewView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       HStack { Text("记忆设置").font(.headline); Spacer(); Button("关闭", action: dismiss) }
-      Text("直接发送消息即可。SideAI 会自动参考相关历史，来源显示在这次回复中，点开即可查看。").font(.callout)
+      Text("GPT / Responses 聊天会按需搜索、分页读取允许参考的历史；其他连接自动匹配相关摘录。来源显示在本轮消息中，点开即可查看。").font(.callout)
       if let c = store.selected {
         Toggle("本会话使用记忆", isOn: Binding(get: { c.memoryEnabled != false }, set: { value in store.mutate(c.id) { $0.memoryEnabled = value } })).disabled(store.isBusy)
         Toggle("允许其他会话参考这条会话", isOn: Binding(get: { c.memoryExcluded != true }, set: { value in store.mutate(c.id) { $0.memoryExcluded = !value } })).disabled(store.isBusy)

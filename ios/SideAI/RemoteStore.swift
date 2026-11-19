@@ -14,6 +14,10 @@ struct PhoneConfiguration: Codable {
   @Published var error: String?
   @Published var pending = false
   @Published var draft = ""
+  @Published var olderHistory: [RemoteValue] = []
+  @Published var hasOlderHistory = true
+  private var historyPageID = ""
+  private var historyConversationID = ""
   @Published var lastSentText: String?
   private let channel = RemoteChannel()
   private var nonce = UUID().uuidString
@@ -74,9 +78,11 @@ struct PhoneConfiguration: Codable {
   }
   private func receive(_ message: RemoteValue) {
     guard message["nonce"].text == nonce else { return }
+    if message["kind"].text == "heartbeat" { lastSeen = Date(); return }
     if message["kind"].text == "pairing" { status = "请在电脑上允许这台手机"; online = false; return }
     if message["kind"].text == "state" {
       let id = message["current"]["id"].text
+      mergeHistory(message, conversation: id)
       if draftConversation != id { drafts[draftConversation] = draft; draft = drafts[id] ?? ""; draftConversation = id }
       state = message; lastSeen = Date(); online = true; status = "已连接 · " + message["host"].text; return }
     if message["kind"].text == "ack", message["id"].text == commandID {
@@ -115,4 +121,30 @@ struct PhoneConfiguration: Codable {
     state = (try? JSONDecoder().decode(RemoteValue.self, from: Data(json.utf8))) ?? .null
   }
   #endif
+}
+
+
+extension RemoteStore {
+  var visibleHistory: [RemoteValue] {
+    guard state["capabilities"]["historyPaging"].bool else { return current["items"].array }
+    let latest = current["items"].array, ids = Set(latest.map { $0["id"].text })
+    return olderHistory.filter { !ids.contains($0["id"].text) } + latest
+  }
+  func loadOlderHistory() {
+    let first = visibleHistory.first?["id"].text ?? ""
+    command("historyPage", fields: ["before": .string(first)])
+  }
+  private func mergeHistory(_ snapshot: RemoteValue, conversation: String) {
+    if historyConversationID != conversation { olderHistory = []; hasOlderHistory = true; historyPageID = ""; historyConversationID = conversation }
+    guard snapshot["capabilities"]["historyPaging"].bool else { olderHistory = []; return }
+    if current["id"].text == conversation {
+      let known = Set(olderHistory.map { $0["id"].text })
+      olderHistory += current["items"].array.filter { !known.contains($0["id"].text) }
+    }
+    let page = snapshot["historyPage"]
+    guard page["conversation"].text == conversation, !page["request"].text.isEmpty, page["request"].text != historyPageID else { return }
+    historyPageID = page["request"].text; hasOlderHistory = page["hasMore"].bool
+    let incoming = page["items"].array, ids = Set(incoming.map { $0["id"].text })
+    olderHistory = incoming + olderHistory.filter { !ids.contains($0["id"].text) }
+  }
 }

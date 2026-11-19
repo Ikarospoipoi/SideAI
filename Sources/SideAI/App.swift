@@ -37,6 +37,7 @@ import SwiftUI
     main.addItem(editItem)
     NSApp.mainMenu = main
     store = SessionStore()
+    _ = store.productivityCoordinator
     store.remoteHost.resume()
     controller = EdgePanelController(store: store)
     controller.showSettings = { [weak self] in self?.settings() }

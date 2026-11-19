@@ -12,6 +12,7 @@ struct RemoteHostConfiguration: Codable {
 }
 
 @MainActor final class RemoteHost: ObservableObject {
+  static let defaultRelayURL = "wss://sideai-remote-relay.sideai-cloudflare-relay.workers.dev/v1/connect"
   @Published var status = "未开启"
   @Published var configuration: RemoteHostConfiguration?
   @Published var pendingDevice: (id: String, name: String)?
@@ -81,7 +82,7 @@ struct RemoteHostConfiguration: Codable {
       let id = message["device"].text, nonce = message["nonce"].text
       guard UUID(uuidString: id) != nil, UUID(uuidString: nonce) != nil else { return }
       guard config.deviceID == id || (config.deviceID == nil && config.pairing.expires > Date().timeIntervalSince1970) else { return }
-      currentDevice = id; phoneNonce = nonce; challenge = UUID().uuidString
+      currentDevice = id; phoneNonce = nonce; challenge = UUID().uuidString; historyPage = .null
       if watchedID == nil { watchedID = store?.selectedID }
       if config.deviceID == nil { pendingDevice = (id, String(message["name"].text.prefix(60))); status = "请确认手机配对" }
       else { status = "手机已连接 · 可遥控" }
@@ -106,7 +107,7 @@ struct RemoteHostConfiguration: Codable {
     let operation = message["op"].text
     if operation == "watch" {
       guard let id = UUID(uuidString: message["conversation"].text), store.state.conversations.contains(where: { $0.id == id }) else { throw RemoteError.message("会话不存在") }
-      watchedID = id; return
+      watchedID = id; historyPage = .null; return
     }
     if operation == "new" {
       guard !store.isBusy, let route = store.routes.first(where: { $0.id == message["route"].text }) else { throw RemoteError.message("请等待当前任务结束，或检查连接") }
@@ -137,6 +138,11 @@ struct RemoteHostConfiguration: Codable {
     guard let id = UUID(uuidString: message["conversation"].text), let c = store.state.conversations.first(where: { $0.id == id }) else { throw RemoteError.message("会话不存在") }
     watchedID = id
     if operation == "stop" { store.interrupt(id); return }
+    if operation == "historyPage" {
+      guard store.enhanced(c) else { throw RemoteError.message("此连接保留原有历史浏览方式") }
+      historyPage = try RemoteHistory.page(c, before: message["before"].text, requestID: message["id"].text)
+      return
+    }
     guard !store.isBusy, revision(c) == message["revision"].text else { throw RemoteError.message("电脑上的会话已改变或正在运行，请刷新后再试") }
     let route = store.route(for: c)
     guard store.routes.contains(where: { $0.id == route.id }), store.activate(route) else { throw RemoteError.message("此连接不可用") }
@@ -147,11 +153,11 @@ struct RemoteHostConfiguration: Codable {
       store.refreshCurrentModels(); return
     }
     if operation == "configure" {
-      let model = message["model"].text, effort = message["effort"].text, mode = message["mode"].text, cwd = message["cwd"].text
-      guard !model.isEmpty, model.count <= 200, effort.count <= 40, ["readOnly", "project"].contains(mode), (cwd == c.cwd || projects().contains(where: { $0["path"].text == cwd })) else { throw RemoteError.message("模型或项目无效，请在电脑上先添加项目") }
+      let model = message["model"].text, effort = message["effort"].text, cwd = message["cwd"].text
+      guard !model.isEmpty, model.count <= 200, effort.count <= 40, (cwd == c.cwd || projects().contains(where: { $0["path"].text == cwd })) else { throw RemoteError.message("模型或项目无效，请在电脑上先添加项目") }
       let option = store.availableModels.first { $0.id == model }
       guard effort.isEmpty || (option?.efforts ?? ["none", "minimal", "low", "medium", "high", "xhigh", "max"]).contains(effort) else { throw RemoteError.message("推理强度无效") }
-      store.mutate(id) { $0.modelID = model; $0.reasoningEffort = effort.isEmpty ? nil : effort; $0.cwd = cwd; if c.workspace == .agent { $0.mode = mode == "project" ? .project : .readOnly } }
+      store.mutate(id) { $0.modelID = model; $0.reasoningEffort = effort.isEmpty ? nil : effort; $0.cwd = cwd; if c.workspace == .agent { $0.mode = .project } }
       return
     }
     if operation == "send" {
@@ -171,6 +177,13 @@ struct RemoteHostConfiguration: Codable {
       return
     }
     throw RemoteError.message("不支持的远程操作")
+  }
+  private var historyPage: RemoteValue = .null
+  private func historySnapshot(_ value: RemoteValue, conversation: Conversation?) -> RemoteValue {
+    guard let store, let c = conversation, store.enhanced(c), case .object(var object) = value else { return value }
+    object["capabilities"] = .object(["historyPaging": .bool(true), "backgroundPush": .bool(false)])
+    if historyPage["conversation"].text == c.id.uuidString { object["historyPage"] = historyPage }
+    return .object(object)
   }
   private func fingerprint(_ text: String) -> String { Data(SHA256.hash(data: Data(text.utf8))).map { String(format: "%02x", $0) }.joined() }
   func revision(_ c: Conversation) -> String { fingerprint([c.id.uuidString,c.status.rawValue,c.modelID ?? "",c.reasoningEffort ?? "",c.cwd,c.mode.rawValue,String(c.updatedAt.timeIntervalSince1970),String(c.items.count),c.items.last?.id ?? "",String(c.items.last?.text.count ?? 0),c.draft,String(c.images.count)].joined(separator: "|")) }
@@ -206,9 +219,9 @@ struct RemoteHostConfiguration: Codable {
     let current = store.state.conversations.first { $0.id == (watchedID ?? store.selectedID) }
     var detail: RemoteValue = .null
     if let c = current {
-      detail = .object(["id": .string(c.id.uuidString), "route": .string(c.routeID), "title": .string(c.title), "status": .string(c.status.label), "active": .bool(c.status.isActive), "model": .string(c.modelID ?? ""), "effort": .string(c.reasoningEffort ?? ""), "mode": .string(c.mode.rawValue), "cwd": .string(c.cwd), "revision": .string(revision(c)), "error": .string(c.error ?? ""), "items": .array(c.items.suffix(60).map { .object(["id": .string($0.id), "role": .string($0.kind), "text": .string(String(($0.text.isEmpty ? $0.detail : $0.text).prefix(8000))), "truncated": .bool(($0.text.isEmpty ? $0.detail : $0.text).count > 8000), "status": .string($0.status)]) })])
+      detail = .object(["id": .string(c.id.uuidString), "route": .string(c.routeID), "title": .string(c.title), "status": .string(c.status.label), "active": .bool(c.status.isActive), "model": .string(c.modelID ?? ""), "effort": .string(c.reasoningEffort ?? ""), "mode": .string("project"), "cwd": .string(c.cwd), "revision": .string(revision(c)), "error": .string(c.error ?? ""), "items": .array(c.items.suffix(60).map { .object(["id": .string($0.id), "role": .string($0.kind), "text": .string(String(($0.text.isEmpty ? $0.detail : $0.text).prefix(8000))), "truncated": .bool(($0.text.isEmpty ? $0.detail : $0.text).count > 8000), "status": .string($0.status)]) })])
     }
-    return .object(["kind": .string("state"), "nonce": .string(phoneNonce), "challenge": .string(challenge), "host": .string(configuration?.pairing.name ?? "电脑"), "routes": .array(routes), "busy": .bool(store.isBusy), "projects": .array(projects()), "conversations": .array(conversations.map { .object(["id": .string($0.id.uuidString), "route": .string($0.routeID), "title": .string($0.title), "status": .string($0.status.label)]) }), "current": detail, "approvals": .array(Array(approvals().prefix(4)))])
+    return historySnapshot(.object(["kind": .string("state"), "nonce": .string(phoneNonce), "challenge": .string(challenge), "host": .string(configuration?.pairing.name ?? "电脑"), "routes": .array(routes), "busy": .bool(store.isBusy), "projects": .array(projects()), "conversations": .array(conversations.map { .object(["id": .string($0.id.uuidString), "route": .string($0.routeID), "title": .string($0.title), "status": .string($0.status.label)]) }), "current": detail, "approvals": .array(Array(approvals().prefix(4)))]), conversation: current)
   }
   private func publish(force: Bool = false) {
     guard channel.connected, !phoneNonce.isEmpty else { return }
@@ -225,6 +238,10 @@ struct RemoteHostConfiguration: Codable {
       }
     }
     let digest = fingerprint(value.pretty)
-    if force || digest != lastSnapshot || Date().timeIntervalSince(lastPublished) > 10 { lastSnapshot = digest; lastPublished = Date(); channel.send(value) }
+    if force || digest != lastSnapshot { lastSnapshot = digest; lastPublished = Date(); channel.send(value) }
+    else if Date().timeIntervalSince(lastPublished) > 10 {
+      lastPublished = Date()
+      channel.send(.object(["kind": .string("heartbeat"), "nonce": .string(phoneNonce)]))
+    }
   }
 }

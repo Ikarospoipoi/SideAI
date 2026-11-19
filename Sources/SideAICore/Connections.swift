@@ -45,6 +45,28 @@ public struct ModelOption: Identifiable, Equatable {
       defaultEffort: codex["defaultReasoningEffort"].string,
       supportsImages: codex["inputModalities"] == .null ? nil : codex["inputModalities"].array.contains(.string("image")))
   }
+  /// Preserve capabilities advertised by the service; a model name alone is not a capability contract.
+  public init(api row: JSON, id: String) {
+    let supported = row["supported_reasoning_levels"] != .null ? row["supported_reasoning_levels"]
+      : row["supported_reasoning_efforts"] != .null ? row["supported_reasoning_efforts"] : row["supportedReasoningEfforts"]
+    let efforts = supported.array.compactMap { value -> String? in
+      let effort = value.string ?? value["effort"].string ?? value["reasoningEffort"].string
+      return effort.flatMap { $0.isEmpty ? nil : $0 }
+    }
+    let preferred = row["default_reasoning_level"].string ?? row["default_reasoning_effort"].string ?? row["defaultReasoningEffort"].string
+    self.init(id: id, name: row["display_name"].string ?? row["displayName"].string,
+      efforts: Array(NSOrderedSet(array: efforts)) as? [String] ?? efforts,
+      defaultEffort: preferred.flatMap { efforts.contains($0) ? $0 : nil })
+  }
+  public func withDocumentedCapabilities(for profile: APIProfile) -> ModelOption {
+    // Only the documented exact model at the official endpoint. Explicit catalog capabilities win.
+    // https://developers.openai.com/api/docs/models/gpt-6-astra (2026-11-12)
+    guard efforts.isEmpty, profile.normalizedEndpoint == "https://api.openai.com/v1",
+      profile.format == .responses, id == "gpt-6-astra" else { return self }
+    var result = self
+    result.efforts = ["low", "medium", "high", "xhigh", "max"]
+    return result
+  }
 }
 public struct ImageAttachment: Codable, Identifiable, Equatable {
   public var id: UUID
@@ -67,7 +89,7 @@ extension Conversation {
     if !text.isEmpty { input.append(.object(["type": .string("text"), "text": .string(text)])) }
     input += images.map { .object(["type": .string("localImage"), "path": .string($0.path)]) }
     var params: [String: JSON] = ["threadId": .string(threadID), "input": .array(input),
-      "cwd": .string(cwd), "approvalPolicy": .string("on-request"), "approvalsReviewer": .string("user"), "sandboxPolicy": mode.policy(cwd: cwd)]
+      "cwd": .string(cwd), "approvalPolicy": .string("on-request"), "approvalsReviewer": .string("user"), "sandboxPolicy": AgentMode.project.policy(cwd: cwd)]
     if let modelID, !modelID.isEmpty { params["model"] = .string(modelID) }
     if let reasoningEffort, !reasoningEffort.isEmpty { params["effort"] = .string(reasoningEffort) }
     return .object(params)

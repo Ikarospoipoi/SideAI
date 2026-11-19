@@ -21,6 +21,29 @@ final class TransportTests: XCTestCase {
   func profile(_ route: String = "v1", format: APIFormat = .responses) -> APIProfile {
     var p = APIProfile(); p.baseURL = "http://127.0.0.1:\(port)/\(route)"; p.format = format; return p
   }
+  @MainActor func testMemoryToolLoopReplaysReasoningAndReadsBeforeAnswering() async throws {
+    let client = HTTPChatClient(); defer { client.cancel() }
+    var calls = [String]()
+    let text = try await client.streamWithMemory(profile: profile("memory-flow"), key: "fixture-key", body: .object(["model": .string("fixture-vision"), "input": .array([]), "store": .bool(false)]), execute: { name, _ in
+      calls.append(name)
+      return .object(["id": .string("fixture-source"), "text": .string("SELECT 42")])
+    }, update: { _ in })
+    XCTAssertEqual(calls, ["search_history", "read_history"])
+    XCTAssertEqual(text, "根据历史 SQL，答案是 42。")
+  }
+  @MainActor func testMemoryToolsRejectUnfinishedUnknownAndUnboundedCalls() async throws {
+    for route in ["memory-truncated", "memory-unknown", "memory-loop"] {
+      let client = HTTPChatClient(); defer { client.cancel() }
+      var calls = 0
+      do {
+        _ = try await client.streamWithMemory(profile: profile(route), key: "fixture-key", body: .object(["model": .string("fixture-vision"), "input": .array([]), "store": .bool(false)]), execute: { _, _ in
+          calls += 1; return .object([:])
+        }, update: { _ in })
+        XCTAssertEqual(route, "memory-unknown")
+      } catch { XCTAssertNotEqual(route, "memory-unknown") }
+      XCTAssertEqual(calls, route == "memory-loop" ? 6 : 0)
+    }
+  }
   func testAllHTTPStreamingAdaptersAndModelDiscovery() async throws {
     for format in APIFormat.allCases {
       let client = HTTPChatClient(); defer { client.cancel() }

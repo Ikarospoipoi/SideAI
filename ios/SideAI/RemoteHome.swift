@@ -2,6 +2,7 @@ import SwiftUI
 import SideAIRemote
 
 struct RemoteHome: View {
+  @State private var historySearch = ""
   @ObservedObject var store: RemoteStore
   @State private var showPairing = false
   @State private var showHistory = false
@@ -70,7 +71,10 @@ struct RemoteHome: View {
           LazyVStack(alignment: .leading, spacing: 22) {
             if store.current["items"].array.isEmpty { Text("从这里发出下一步指令。\n电脑上的 Agent 会继续执行。").font(.title3).foregroundStyle(.secondary).padding(.top, 45) }
             if store.current["historyLimited"].bool { Text("更早的记录请在电脑查看。").font(.caption).foregroundStyle(.secondary) }
-            ForEach(store.current["items"].array, id: \.self) { item in
+            if store.state["capabilities"]["historyPaging"].bool && store.hasOlderHistory {
+              Button("载入更早的消息") { store.loadOlderHistory() }.disabled(store.pending)
+            }
+            ForEach(store.visibleHistory, id: \.self) { item in
               if !item["text"].text.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                   Text(item["role"].text == "userMessage" ? "你" : item["role"].text == "agentMessage" ? "AI" : "操作与进度").font(.caption2).foregroundStyle(.secondary)
@@ -104,8 +108,8 @@ struct RemoteHome: View {
   }
   private var history: some View {
     NavigationStack {
-      List(store.state["conversations"].array, id: \.self) { c in Button { store.command("watch", fields: ["conversation": c["id"]]); showHistory = false } label: { VStack(alignment: .leading, spacing: 5) { Text(c["title"].text); Text(c["status"].text).font(.caption).foregroundStyle(.secondary) } } }
-        .navigationTitle("电脑上的会话").toolbar { Button("完成") { showHistory = false } }
+      List(store.state["conversations"].array.filter { historySearch.isEmpty || $0["title"].text.localizedCaseInsensitiveContains(historySearch) }, id: \.self) { c in Button { store.command("watch", fields: ["conversation": c["id"]]); showHistory = false } label: { VStack(alignment: .leading, spacing: 5) { Text(c["title"].text); Text(c["status"].text).font(.caption).foregroundStyle(.secondary) } } }
+        .searchable(text: $historySearch, prompt: "搜索会话标题").navigationTitle("电脑上的会话").toolbar { Button("完成") { showHistory = false } }
     }
   }
   private var device: some View {

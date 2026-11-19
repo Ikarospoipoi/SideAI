@@ -55,10 +55,11 @@ struct ModelPicker: View {
           }
         }
       }
-      if let option = store.availableModels.first(where: { $0.id == store.selected?.modelID }), !option.efforts.isEmpty {
-        Picker("推理强度", selection: Binding(get: { store.selected?.reasoningEffort ?? option.defaultEffort ?? "" }, set: { value in if let id = store.selectedID { store.mutate(id) { $0.reasoningEffort = value } } })) {
+      if let option = store.selectedModelOption, !option.efforts.isEmpty {
+        Picker("推理强度", selection: Binding(get: { store.selected?.reasoningEffort ?? "" }, set: { value in if let id = store.selectedID { store.mutate(id) { $0.reasoningEffort = value.isEmpty ? nil : value } } })) {
+          Text("服务默认").tag("")
           ForEach(option.efforts, id: \.self) { Text($0).tag($0) }
-        }
+        }.disabled(store.isBusy)
       }
       if store.selected?.engine == .api || store.selected?.engine == .claude || store.selected?.engine == .accountRuntime {
         Divider()

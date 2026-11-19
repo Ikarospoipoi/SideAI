@@ -17,6 +17,7 @@ struct WorkspaceSwitcher: View {
   }
 }
 struct LauncherView: View {
+  @State private var showWorkbench = false
   @ObservedObject var store: SessionStore
   var configure: (ProviderKind?) -> Void
   var body: some View {
@@ -31,6 +32,7 @@ struct LauncherView: View {
         Button { configure(nil) } label: { Image(systemName: "gearshape") }.buttonStyle(.plain).help("连接设置").accessibilityLabel("连接设置")
       }
       WorkspaceSwitcher(store: store)
+      Button("打开工作台：搜索、项目与任务") { showWorkbench = true }.buttonStyle(.plain).font(.caption)
       if store.workspaceRoutes.isEmpty {
         VStack(spacing: 14) {
           Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 28)).foregroundStyle(.secondary)
@@ -42,7 +44,7 @@ struct LauncherView: View {
           ForEach(store.workspaceRoutes) { route in
             Button { store.switchConnection(route) } label: {
               tile(name: route.name, symbol: route.provider.monogram, detail: "进入对话", color: route.provider.accentColor, configured: true)
-            }.buttonStyle(.plain).accessibilityLabel(route.name + "，进入对话")
+            }.buttonStyle(.plain).help(route.name).accessibilityLabel(route.name + "，进入对话")
           }
         }
       }
@@ -56,6 +58,8 @@ struct LauncherView: View {
         .font(.system(size: 10)).foregroundStyle(.secondary)
       if store.approvalCount > 0 { Text("\(store.approvalCount) 项任务等待确认").font(.caption).foregroundStyle(.orange) }
     }.padding(20).tint(.gray)
+      .sheet(isPresented: $showWorkbench) { ProductivityView(store: store, dismiss: { showWorkbench = false }) }
+      .onChange(of: showWorkbench) { _, value in store.hasPopover = value }
     }
   }
   private func tile(name: String, symbol: String, detail: String, color: Color, configured: Bool) -> some View {
@@ -67,8 +71,9 @@ struct LauncherView: View {
         Image(systemName: configured ? "arrow.up.right" : "plus").font(.system(size: 10, weight: .semibold))
       }.foregroundStyle(.secondary)
       Text(name).font(.system(size: 13, weight: .semibold)).foregroundStyle(color)
-      Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2).frame(height: 27, alignment: .topLeading)
-    }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .lineLimit(1).truncationMode(.middle)
+      Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+    }.padding(12).frame(maxWidth: .infinity, alignment: .leading).frame(height: 108, alignment: .topLeading)
       .background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
       .overlay(RoundedRectangle(cornerRadius: 12).stroke(.primary.opacity(0.12)))
       .contentShape(RoundedRectangle(cornerRadius: 12))
@@ -85,7 +90,6 @@ struct HandoffView: View {
   @State private var includeMemory = false
   @State private var selectedImages = Set<UUID>()
   @State private var project = ""
-  @State private var mode = AgentMode.readOnly
   private var target: ConnectionRoute { store.routes.first { $0.id == targetID } ?? .codex }
   private var images: [ImageAttachment] {
     var seen = Set<UUID>()
@@ -121,7 +125,6 @@ struct HandoffView: View {
           }
           Toggle("携带我的记忆笔记", isOn: $includeMemory).disabled((store.settings.sharedMemory ?? "").isEmpty)
           if includeMemory { Text(store.settings.sharedMemory ?? "").font(.caption).textSelection(.enabled) }
-          Picker("权限", selection: $mode) { ForEach(AgentMode.allCases, id: \.rawValue) { Text($0.label).tag($0) } }
           HStack {
             Text(project.isEmpty ? "未选择项目" : project).font(.caption).lineLimit(2)
             Spacer()
@@ -138,9 +141,9 @@ struct HandoffView: View {
         Button("创建任务草稿") {
           store.createHandoff(source: source, route: target, task: task, context: context,
                               images: images.filter { selectedImages.contains($0.id) },
-                              memory: includeMemory ? store.settings.sharedMemory ?? "" : "", cwd: project, mode: mode)
+                              memory: includeMemory ? store.settings.sharedMemory ?? "" : "", cwd: project, mode: .project)
           dismiss()
-        }.disabled(task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (mode == .project && project.isEmpty) || store.isBusy || !store.routes.contains(where: { $0.id == targetID }))
+        }.disabled(task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.isBusy || !store.routes.contains(where: { $0.id == targetID }))
       }
     }.padding(20).frame(width: 480, height: 620).background(Color(nsColor: .windowBackgroundColor)).tint(.gray)
       .onAppear { task = source.draft; targetID = store.routes.first(where: { $0.workspace == .agent })?.id ?? "" }

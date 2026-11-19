@@ -3,7 +3,7 @@ import CoreImage.CIFilterBuiltins
 
 struct RemoteHostSettings: View {
   @ObservedObject var host: RemoteHost
-  @State private var relay = ""
+  @State private var relay = RemoteHost.defaultRelayURL
   @State private var confirmRevoke = false
   var body: some View {
     ScrollView {
@@ -19,7 +19,11 @@ struct RemoteHostSettings: View {
             Button("解除手机配对", role: .destructive) { confirmRevoke = true }
           }
         } else {
-          TextField("wss://你的中继域名/v1/connect", text: $relay).textFieldStyle(.roundedBorder)
+          Text("扫描二维码，即可从手机连接电脑；不必在同一个 Wi-Fi。").foregroundStyle(.secondary)
+          DisclosureGroup("高级：自定义中继") {
+            TextField("wss://中继域名/v1/connect", text: $relay).textFieldStyle(.roundedBorder)
+            Button("使用 SideAI 默认中继") { relay = RemoteHost.defaultRelayURL }
+          }.font(.caption)
           Button(host.configuration == nil ? "生成配对二维码" : "重新生成二维码") { host.create(relay: relay) }
           if let config = host.configuration {
             if let image = qr(config.pairing.link) { Image(nsImage: image).interpolation(.none).resizable().frame(width: 230, height: 230).padding(12).background(.white).clipShape(RoundedRectangle(cornerRadius: 12)) }
@@ -35,9 +39,9 @@ struct RemoteHostSettings: View {
           }
         }
         Divider()
-        Text("异地访问通过你部署的中继转发，消息在设备之间加密。中继不保存聊天记录。暂停或解除配对立即停止远程指令；已经运行的任务仍在电脑继续。").font(.caption).foregroundStyle(.secondary)
+        Text("通过中继连接，消息在手机与电脑之间端到端加密。中继不保存聊天记录。暂停或解除配对立即停止远程指令；已经运行的任务仍在电脑继续。").font(.caption).foregroundStyle(.secondary)
       }.padding(22)
-    }.onAppear { relay = host.configuration?.pairing.relay ?? "" }
+    }.onAppear { relay = host.configuration?.pairing.relay ?? RemoteHost.defaultRelayURL }
       .confirmationDialog("解除这台手机的远程控制权限？", isPresented: $confirmRevoke) { Button("解除配对", role: .destructive) { host.revoke() } }
   }
   private func qr(_ text: String) -> NSImage? {

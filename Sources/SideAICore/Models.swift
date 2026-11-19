@@ -62,7 +62,7 @@ public struct Conversation: Codable, Identifiable {
   public var threadID: String?
   public var turnID: String?
   public var cwd: String
-  public var mode: AgentMode = .readOnly
+  public var mode: AgentMode = .project
   public var draft = ""
   public var archived = false
   public var items = [TimelineItem]()

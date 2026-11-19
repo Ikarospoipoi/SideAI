@@ -21,6 +21,13 @@ struct ConnectionManagerView: View {
             ForEach(routes) { route in
               VStack(alignment: .leading, spacing: 8) {
                 Text(route.name).font(.headline).foregroundStyle(route.provider.accentColor)
+                if let feedback = store.connectionFeedback(for: route) {
+                  Text(feedback.title).font(.caption)
+                  if !feedback.detail.isEmpty { Text(feedback.detail).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled) }
+                  if let diagnostic = feedback.diagnostic {
+                    DisclosureGroup("请求诊断") { Text(diagnostic.summary).font(.caption2).textSelection(.enabled) }.font(.caption)
+                  }
+                }
                 HStack {
                   Button("打开") { store.switchConnection(route) }
                   if let profile = store.profiles.first(where: { $0.id == route.profileID }) {

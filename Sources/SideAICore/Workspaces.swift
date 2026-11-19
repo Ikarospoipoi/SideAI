@@ -12,7 +12,7 @@ extension ConnectionRoute {
   public var selectionGroup: String { workspace.rawValue + ":" + (workspace == .agent ? id : groupID) }
 }
 extension Conversation {
-  public var claudeUsesTools: Bool { engine == .claude && claudeChatOnly != true && claudeAgentEnabled == true }
+  public var claudeUsesTools: Bool { engine == .claude && claudeChatOnly != true }
   public var workspace: WorkspaceMode { engine == .claude && claudeChatOnly == true ? .chat : engine.workspace }
 }
 

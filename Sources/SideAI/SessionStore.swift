@@ -3,6 +3,10 @@ import SideAICore
 import SwiftUI
 
 @MainActor final class SessionStore: ObservableObject {
+  @Published var searchJump: HistoryJump?
+  @Published var readingPositions = [UUID: String]()
+  @Published var queueRunning = false
+  lazy var productivityCoordinator = ProductivityCoordinator(store: self)
   @Published var addingConnection = false
   @Published var accountSigningIn: String?
   @Published var accountLoginStatus = ""
@@ -27,6 +31,7 @@ import SwiftUI
   @Published var claudeChecking = false
   @Published var claudeStatus = "尚未检测 Claude 登录"
   @Published var apiConnectionStatus = [UUID: String]()
+  @Published var connectionFeedbackByRoute = [String: ConnectionFeedback]()
   var claudeTasks = [UUID: Task<Void, Never>]()
   var claudeClients = [UUID: ClaudeCodeClient]()
   @Published var testingProfiles = Set<UUID>()
@@ -73,6 +78,8 @@ import SwiftUI
   private var bufferedDeltas = [JSON]()
   private var deltaFlush: Task<Void, Never>?
   private var canPersist = true
+  private var persistenceGeneration: UInt64 = 0
+  private let snapshotStaging = SnapshotStagingQueue()
   var selected: Conversation? { state.conversations.first { $0.id == selectedID } }
   var isBusy: Bool { preparingMemory || accountSigningIn != nil || preparingAPI || credentialAuthorizing || !testingProfiles.isEmpty || state.conversations.contains { $0.status.isActive } || !loading.isEmpty }
   var pending: [PendingRequest] { state.pending }
@@ -141,7 +148,7 @@ import SwiftUI
         }
       } catch {
         connection = "连接失败"
-        banner = error.localizedDescription
+        banner = ConnectionFeedback.failure(error, title: "Codex 连接失败").detail + "\n请检查 Codex 登录、CLI 路径和代理设置。"
       }
       connecting = false
       if ready { syncConversations() }
@@ -212,7 +219,7 @@ import SwiftUI
   }
   private func threadParams(_ c: Conversation) -> [String: JSON] {
     var params: [String: JSON] = [
-      "cwd": .string(c.cwd), "sandbox": .string(c.mode.sandbox),
+      "cwd": .string(c.cwd), "sandbox": .string(AgentMode.project.sandbox),
       "approvalPolicy": .string("on-request"), "approvalsReviewer": .string("user"),
       "config": .object(["features.apps": .bool(false), "features.multi_agent": .bool(false)]),
       "developerInstructions": .string(
@@ -317,9 +324,6 @@ import SwiftUI
   }
   func send() {
     guard canSend, let c = selected else { return }
-    if c.workspace == .agent && c.mode == .project && c.cwd == scratch.path {
-      banner = "请先为项目 Agent 选择一个工作目录。"; return
-    }
     if c.engine == .codex, let tid = c.threadID, externalThreads.contains(tid) {
       banner = "此会话正在其他客户端运行，请稍后同步。"; return
     }
@@ -355,10 +359,6 @@ import SwiftUI
     if !c.images.isEmpty, codexModels.first(where: { $0.id == c.modelID })?.supportsImages == false {
       banner = "当前模型不支持图片，请切换模型。"; return
     }
-    if c.mode == .project && c.cwd == scratch.path {
-      banner = "请先为项目 Agent 选择一个工作目录。"
-      return
-    }
     loading.insert(c.id)
     mutate(c.id) {
       $0.error = nil
@@ -376,11 +376,12 @@ import SwiftUI
         _ = try await client.request("turn/start", c.codexTurnParams(threadID: tid, memory: memory))
         // Enable interrupt only after turn/started, not merely the acceptance response.
       } catch {
+        let message = connectionFailureMessage(error, for: .codex)
         mutate(c.id) {
           $0.status = .failed
-          $0.error = error.localizedDescription
+          $0.error = message
         }
-        banner = error.localizedDescription
+        banner = message
       }
     }
   }
@@ -482,13 +483,39 @@ import SwiftUI
     onSettingsChanged?()
   }
   func saveSoon() {
+    persistenceGeneration &+= 1
+    let generation = persistenceGeneration
     saving?.cancel()
     saving = Task {
       try? await Task.sleep(nanoseconds: 400_000_000)
-      if !Task.isCancelled { saveNow() }
+      if !Task.isCancelled {
+        if let c = selected, enhanced(c), !state.conversations.contains(where: { $0.status.isActive && !enhanced($0) }) {
+          await saveDeferred(generation: generation)
+        } else { saveNow() }
+      }
     }
   }
+  func commitQueuedDispatch(_ id: UUID) throws {
+    guard canPersist else { throw ProtocolError.message("本地存储不可写，队列保持暂停。") }
+    var next = settings, productivity = productivitySettings
+    productivity.queue.removeAll { $0.id == id }; next.productivity = productivity
+    persistenceGeneration &+= 1
+    try persistence.save(Snapshot(settings: next, conversations: state.conversations, selectedID: selectedID))
+    settings = next
+  }
+  private func saveDeferred(generation: UInt64) async {
+    guard canPersist else { return }
+    let snapshot = Snapshot(settings: settings, conversations: state.conversations, selectedID: selectedID)
+    let directory = persistence.directory
+    do {
+      let staged = try await snapshotStaging.stage(snapshot, directory: directory)
+      defer { try? FileManager.default.removeItem(at: staged) }
+      guard !Task.isCancelled, generation == persistenceGeneration else { return }
+      try SnapshotStaging.commit(staged, directory: directory)
+    } catch { if !Task.isCancelled && generation == persistenceGeneration { banner = "保存失败：\(error.localizedDescription)" } }
+  }
   func saveNow() {
+    persistenceGeneration &+= 1
     guard canPersist else { return }
     do {
       try persistence.save(
@@ -496,6 +523,7 @@ import SwiftUI
     } catch { banner = "保存失败：\(error.localizedDescription)" }
   }
   func shutdown() {
+    queueRunning = false
     remoteHostBacking?.stop()
     cancelAccountLogin()
     memoryPreparationTask?.cancel()

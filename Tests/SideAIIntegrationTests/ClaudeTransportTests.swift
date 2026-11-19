@@ -29,32 +29,35 @@ final class ClaudeTransportTests: XCTestCase {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("sideai-agent-" + UUID().uuidString)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: dir) }
+    let environment = ProcessInfo.processInfo.environment["SIDEAI_CLAUDE_ISOLATED"] == "1"
+      ? try RuntimeEnvironment.isolated(path: path, key: "CLAUDE_CONFIG_DIR", name: "claude") : nil
     let file = dir.appendingPathComponent("note.txt")
     try "ORIGINAL".write(to: file, atomically: true, encoding: .utf8)
-    for allow in [false, true] {
-      var c = Conversation(cwd: dir.path); c.backend = .claude; c.claudeAgentEnabled = true; c.mode = .project
+    for (tool, allow) in [("Write", false), ("Write", true), ("Bash", false), ("Bash", true)] {
+      try "ORIGINAL".write(to: file, atomically: true, encoding: .utf8)
+      var c = Conversation(cwd: dir.path); c.backend = .claude; c.claudeAgentEnabled = false; c.mode = .readOnly
       c.claudeSessionID = UUID().uuidString; c.modelID = "sonnet"; c.reasoningEffort = "low"
-      c.draft = "Test fixture only: use the Write tool to replace note.txt with exactly UPDATED. If permission is denied, stop immediately and report denial; do not try another tool."
+      c.draft = "Test fixture only: use the \(tool) tool to replace note.txt with exactly UPDATED. For Bash use: printf UPDATED > note.txt. If permission is denied, stop immediately and report denial; do not try another tool."
       let conversation = c
       let client = ClaudeCodeClient(), accumulator = ClaudeAccumulator(allowedTools: ClaudePermissions.tools(for: conversation))
       let approvals = ApprovalCounter()
       var input = try JSONEncoder().encode(ClaudeProtocol.input(c)); input.append(10)
       let timeout = Task { try? await Task.sleep(nanoseconds: 90_000_000_000); if !Task.isCancelled { client.cancel() } }
       defer { timeout.cancel() }
-      let code = try await client.run(path: path, arguments: ClaudeProtocol.arguments(conversation: c), input: input, cwd: dir, interactive: true) { event in
+      let code = try await client.run(path: path, arguments: ClaudeProtocol.arguments(conversation: c) + ["--settings", "{\"permissions\":{\"ask\":[\"Write\",\"Bash\"]}}"], input: input, cwd: dir, interactive: true, environment: environment) { event in
         accumulator.receive(event)
         if event["type"].text == "control_request" {
           approvals.increment()
           let valid = ClaudePermissions.approval(event: event, conversation: conversation) != nil
           client.sendControl(ClaudePermissions.reply(id: event["request_id"].text, input: event["request"]["input"], allow: allow && valid))
         }
-        if accumulator.snapshot().error != nil { client.cancel() }
+        if let error = accumulator.snapshot().error { print("LIVE_CLAUDE_ERROR: \(error.prefix(1000))"); client.cancel() }
       }
       let result = accumulator.snapshot()
       XCTAssertEqual(code, 0); XCTAssertNil(result.error); XCTAssertTrue(result.state.completed)
       XCTAssertGreaterThan(approvals.value, 0, "A write must require a visible permission request")
       XCTAssertEqual(try String(contentsOf: file), allow ? "UPDATED" : "ORIGINAL")
-      print("LIVE_CLAUDE_AGENT approved=\(allow) callbacks=\(approvals.value) completed=\(result.state.completed)")
+      print("LIVE_CLAUDE_AGENT tool=\(tool) approved=\(allow) callbacks=\(approvals.value) completed=\(result.state.completed)")
     }
   }
   /// Explicitly opt in: uses the locally signed-in account for two small real requests.

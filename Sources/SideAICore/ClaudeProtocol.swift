@@ -7,9 +7,10 @@ public enum ClaudeProtocol {
   public static func arguments(conversation: Conversation) throws -> [String] {
     guard let session = conversation.claudeSessionID, UUID(uuidString: session) != nil else { throw ProtocolError.message("Claude 会话 ID 无效") }
     var args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-      "--safe-mode", "--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}", "--tools", ClaudePermissions.tools(for: conversation).joined(separator: ","), "--permission-mode", conversation.claudeUsesTools ? "manual" : "dontAsk", "--disable-slash-commands",
+      "--tools", ClaudePermissions.tools(for: conversation).joined(separator: ","), "--permission-mode", conversation.claudeUsesTools ? "manual" : "dontAsk",
       conversation.claudeHasSession == true ? "--resume" : "--session-id", session]
-    if conversation.claudeUsesTools { args += ["--restricted", "--permission-prompt-tool", "stdio"] }
+    if conversation.claudeUsesTools { args += ["--permission-prompt-tool", "stdio"] }
+    else { args += ["--safe-mode", "--strict-mcp-config", "--mcp-config", "{\"mcpServers\":{}}", "--disable-slash-commands"] }
     if let model = conversation.modelID, !model.isEmpty { args += ["--model", model] }
     if let effort = conversation.reasoningEffort, !effort.isEmpty { args += ["--effort", effort] }
     return args
@@ -36,7 +37,7 @@ public struct ClaudeStreamState {
     switch event["type"].text {
     case "system":
       if event["subtype"].text == "init" {
-        guard Set(event["tools"].array.map(\.text)).isSubset(of: allowedTools), event["mcp_servers"].array.isEmpty else { throw ProtocolError.message("Claude 启用了本会话未授权的工具，连接已停止。") }
+        guard allowedTools.contains("default") || (Set(event["tools"].array.map(\.text)).isSubset(of: allowedTools) && event["mcp_servers"].array.isEmpty) else { throw ProtocolError.message("Claude 启用了本会话未授权的工具，连接已停止。") }
         started = true; model = event["model"].string
       }
     case "stream_event":

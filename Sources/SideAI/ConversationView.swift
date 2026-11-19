@@ -50,6 +50,7 @@ struct ConversationView: View {
   @State private var showSessions = false
   @State private var showModels = false
   @State private var showHandoff = false
+  @State private var showWorkbench = false
   @State private var resizeStart: CGFloat?
   var body: some View {
     VStack(spacing: 0) {
@@ -106,7 +107,10 @@ struct ConversationView: View {
           ).padding(10)
         }.buttonStyle(.plain).foregroundStyle(.orange)
       }
-      if let c = store.selected { TimelineView(conversation: c, openSource: { id in if let uuid = UUID(uuidString: id) { store.select(uuid) } }).id(c.id) } else { Spacer() }
+      if let c = store.selected {
+        if store.searchable(c) { EnhancedTimelineView(store: store, conversation: c).id(c.id) }
+        else { TimelineView(conversation: c, openSource: { id in if let uuid = UUID(uuidString: id) { store.select(uuid) } }).id(c.id) }
+      } else { Spacer() }
       composer
       }
     }
@@ -123,13 +127,15 @@ struct ConversationView: View {
           }.onEnded { _ in resizeStart = nil })
     }
     .tint(.gray)
+    .sheet(isPresented: $showWorkbench) { ProductivityView(store: store, dismiss: { showWorkbench = false }) }
     .sheet(isPresented: $showHandoff) {
       if let c = store.selected { HandoffView(store: store, source: c, dismiss: { showHandoff = false }) }
     }
-    .onChange(of: showModels) { _, _ in store.hasPopover = showModels || showSessions }
-    .onChange(of: showSessions) { _, _ in store.hasPopover = showModels || showSessions }
+    .onChange(of: showWorkbench) { _, _ in store.hasPopover = showModels || showSessions || showWorkbench }
+    .onChange(of: showModels) { _, _ in store.hasPopover = showModels || showSessions || showWorkbench }
+    .onChange(of: showSessions) { _, _ in store.hasPopover = showModels || showSessions || showWorkbench }
     .onReceive(NotificationCenter.default.publisher(for: Notification.Name("SideAIDismissPopovers"))) { _ in
-      showModels = false; showSessions = false; store.hasPopover = false
+      showModels = false; showSessions = false; showWorkbench = false; store.hasPopover = false
     }
   }
   private var header: some View {
@@ -170,6 +176,12 @@ struct ConversationView: View {
         Button("选择 AI…") {
           controller.collapse(restoreFocus: false)
           controller.showPeek(persistent: true)
+        }
+        if let c = store.selected, store.enhanced(c) {
+          Button("工作台：搜索、项目与任务…") { showWorkbench = true }
+          Button("创建会话分支") { store.createBranch(c) }.disabled(c.status.isActive)
+          Button("导出 Markdown…") { store.exportConversation(c, markdown: true) }
+          Button("导出纯文本…") { store.exportConversation(c, markdown: false) }
         }
         Button("窗口回到屏幕左侧") { controller.resetPosition() }
         Button("设置…") { controller.showSettings?() }
@@ -225,21 +237,9 @@ struct ConversationView: View {
         Text("ChatGPT 导入记录 · 只读").font(.caption).foregroundStyle(.secondary)
         Button("通过默认 API 连接继续此会话") { store.continueArchive() }
       } else {
-      if store.selected?.engine == .claude && store.selected?.claudeAgentEnabled != true && store.selected?.claudeChatOnly != true {
-        Text("旧会话保留无工具模式。点击“交给其他 Agent”可创建新的执行任务。").font(.caption).foregroundStyle(.secondary)
-      }
       HStack(spacing: 7) {
         if store.selected?.workspace == .agent {
-        Menu {
-          ForEach(AgentMode.allCases, id: \.rawValue) { mode in
-            Button(mode.label) {
-              if let c = store.selected { store.mutate(c.id) { $0.mode = mode } }
-            }
-          }
-        } label: {
-          Label(store.selected?.mode.label ?? "只读 Agent", systemImage: "shield.lefthalf.filled")
-            .font(.caption)
-        }.menuStyle(.borderlessButton).fixedSize().disabled(store.isBusy)
+        Label("Agent", systemImage: "terminal").font(.caption)
         Spacer()
         Button {
           store.chooseProject()
@@ -252,12 +252,22 @@ struct ConversationView: View {
         }.buttonStyle(.plain).help(store.selected?.cwd ?? "").disabled(
           store.isBusy)
         } else {
-          Label("轻量聊天 · 不执行本机工具", systemImage: "bubble.left.and.bubble.right").font(.caption)
+          Label("轻量聊天 · 不执行命令或修改文件", systemImage: "bubble.left.and.bubble.right").font(.caption)
           Spacer()
           Button("连接设置") { controller.showSettings?() }.buttonStyle(.plain).font(.caption)
         }
       }.foregroundStyle(.secondary)
-      MemoryIndicator(store: store)
+      HStack {
+        MemoryIndicator(store: store)
+        Spacer()
+        if let c = store.selected, store.enhanced(c) {
+          Button("工作台") { showWorkbench = true }.font(.caption).buttonStyle(.plain)
+          Button("排队") { store.enqueueSelected() }.font(.caption).buttonStyle(.plain).disabled(!c.canSendContent || c.status.isActive)
+        }
+      }
+      if let c = store.selected, store.enhanced(c), [.api, .accountRuntime].contains(c.engine) {
+        ContextBudgetIndicator(store: store, conversation: c)
+      }
       if let c = store.selected, !c.images.isEmpty {
         AttachmentStrip(images: c.images) { image in
           store.mutate(c.id) { $0.attachments = $0.images.filter { $0.id != image.id } }
@@ -301,7 +311,7 @@ struct ConversationView: View {
         RoundedRectangle(cornerRadius: 13)
       ).overlay(RoundedRectangle(cornerRadius: 13).stroke(.primary.opacity(0.1)))
       HStack {
-        Text(store.selected?.engine == .claude ? (store.selected?.claudeChatOnly == true ? "官方 Claude Code 账号 · 纯聊天 · 工具已关闭" : store.selected?.claudeAgentEnabled == true ? "Claude Code · 文件工具 · 写入需确认" : "旧 Claude Code 会话 · 工具已关闭") : store.selected?.workspace == .chat ? "轻量聊天 · 独立会话" : store.selected?.mode == .project ? "项目内可修改 · 越界需审批" : "只读 · 写入需审批").font(.system(size: 10))
+        Text(store.selected?.workspace == .chat ? "轻量聊天 · 独立会话" : store.selected?.engine == .claude ? "Claude Code · 执行操作按原生规则审批" : "Codex · 可执行命令和修改文件 · 按需审批").font(.system(size: 10))
         Spacer()
         Button { showModels.toggle() } label: {
           HStack(spacing: 3) {

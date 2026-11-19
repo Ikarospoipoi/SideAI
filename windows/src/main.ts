@@ -1,4 +1,5 @@
-import {app,BrowserWindow,Tray,Menu,nativeImage,ipcMain,dialog,safeStorage,net,screen,globalShortcut,shell,powerMonitor} from 'electron';
+import {enhancedConnection} from './productivity';
+import {app,BrowserWindow,Tray,Menu,nativeImage,ipcMain,dialog,safeStorage,net,screen,globalShortcut,shell,powerMonitor,clipboard} from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -72,6 +73,21 @@ async function action(method:string,p:any={}){
     case 'select':service.select(p.id);return;
     case 'new':return service.newConversation(p.id);
     case 'patch':service.patch(p.id,p.patch);return;
+    case 'patchProductivity':service.patchProductivity(p.id,p.patch);return;
+    case 'searchText':return service.searchText(String(p.query??''));
+    case 'branchConversation':return service.branchConversation(p.id);
+    case 'clipboardText':return (await clipboard.readText()).slice(0,1000000);
+    case 'readTextFile':{
+      const c=service.conversation();if(!enhancedConnection(service.connection(c.connectionID),c))throw Error('此连接保留原有功能');
+      const result=await pick({title:'读取文本、代码或日志',properties:['openFile']});if(result.canceled)return '';
+      const file=result.filePaths[0],stat=fs.statSync(file);if(!stat.isFile()||stat.size>1000000)throw Error('文件需为不超过 1 MB 的 UTF-8 文本');
+      const data=fs.readFileSync(file);if(data.includes(0))throw Error('不支持二进制文件');const text=new TextDecoder('utf-8',{fatal:true}).decode(data);
+      return '文件：'+path.basename(file)+'\n\n'+text;
+    }
+    case 'exportText':{
+      const text=service.exportText(p.id);const result=await dialog.showSaveDialog(window,{title:'导出可见对话',defaultPath:'SideAI-conversation.md',filters:[{name:'Markdown',extensions:['md']}]});
+      if(!result.canceled&&result.filePath)fs.writeFileSync(result.filePath,text,{encoding:'utf8',mode:0o600});return;
+    }
     case 'send':return service.send(p.id);
     case 'stop':service.stop();return;
     case 'models':return service.models(p.id);

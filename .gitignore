@@ -26,3 +26,7 @@ remote-relay/node_modules/
 ios/DerivedData/
 **/xcuserdata/
 *.xcresult/
+
+cloudflare-relay/node_modules/
+cloudflare-relay/.wrangler/
+cloudflare-relay/.dev.vars*
